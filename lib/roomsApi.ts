@@ -112,6 +112,7 @@ export const ENFORCE_NEW_ROOM_CODE_SYSTEM =
 // The server's HANDLE_RE caps a handle at 32 characters, and a private one
 // spends "priv-" (5) plus "-" plus the 6 digits (7) on structure — so this
 // is what's left for the name someone actually types.
+export const HANDLE_RE = /^[a-zA-Z0-9_-]{1,32}$/;
 export const MAX_PRIVATE_ROOM_NAME_LENGTH = 32 - PRIVATE_ROOM_PREFIX.length - 1 - ROOM_CODE_LENGTH;
 
 // Uses crypto rather than Math.random: this is the whole of a private room's

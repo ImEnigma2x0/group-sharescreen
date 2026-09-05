@@ -55,7 +55,8 @@ export function AccountMenu() {
   >(null);
 
   const name = state.name;
-  const isAccount = Boolean(state.account);
+  const account = state.account;
+  const isAccount = Boolean(account);
   const previousNameRef = useRef(name);
 
   // Closes the rename form once the name actually changes (success, or a
@@ -190,6 +191,11 @@ export function AccountMenu() {
                 <Link href="/amigos" onClick={close} className={itemClass}>
                   Amigos
                 </Link>
+                {state.account?.flags?.includes("ADMIN") && (
+                  <Link href="/admin" onClick={close} className={`${itemClass} font-semibold text-purple-600 dark:text-purple-400`}>
+                    Painel de Admin
+                  </Link>
+                )}
                 {/* Brings its own collapsible section, so it sits in the
                     panel as one row until someone opens it. */}
                 <div className="px-1 pb-1">

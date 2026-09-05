@@ -100,6 +100,7 @@ import { PartnerCard } from "@/components/PartnerCard";
 import { QualitySelect } from "@/components/QualitySelect";
 import { AdsterraBanner } from "@/components/AdsterraBanner";
 import { AdsterraNative } from "@/components/AdsterraNative";
+import { NATIVE_BANNER } from "@/lib/adsterra";
 import { useAdRotation } from "@/lib/useAdRotation";
 import { useAdsterraBlocked } from "@/lib/adsterraFill";
 import { useAdsterraAvailable } from "@/lib/useAdsAllowed";
@@ -1461,7 +1462,12 @@ export function WatchRoom({ handle }: { handle: string }) {
   // depends on the layout: the wide sidebar is 256px, where only the fluid
   // native format is worth anything, and below lg the slot is a strip beside
   // the partner card, which is a fixed banner.
-  const adsterraFormat = isWideLayout ? "native" : "banner";
+  const hasValidNative = Boolean(
+    NATIVE_BANNER &&
+      !NATIVE_BANNER.src.includes("localhost") &&
+      !NATIVE_BANNER.src.includes("127.0.0.1")
+  );
+  const adsterraFormat = isWideLayout && hasValidNative ? "native" : "banner";
   // An ad blocker ends the arrangement: the slot goes back to being the
   // partner's alone, exactly as it was before Adsterra was added here. Worth
   // being explicit about, because the alternative is the failure mode this
@@ -3670,8 +3676,9 @@ export function WatchRoom({ handle }: { handle: string }) {
       </div>
 
       <span
-        className={`mb-2 inline-block w-fit shrink-0 rounded-full px-2.5 py-1 text-xs font-medium text-white sm:hidden ${isPrivateRoomHandle(handle) ? "bg-red-600" : "bg-emerald-600"
-          }`}
+        className={`mb-2 inline-block w-fit shrink-0 rounded-full px-2.5 py-1 text-xs font-medium text-white sm:hidden ${
+          isPrivateRoomHandle(handle) ? "bg-red-600" : "bg-emerald-600"
+        }`}
       >
         {isPrivateRoomHandle(handle) ? "Sala privada" : "Sala pública"}
       </span>
@@ -4636,12 +4643,14 @@ export function WatchRoom({ handle }: { handle: string }) {
                 placement="bottom"
               >
                 <span
-                  className={`flex shrink-0 items-center gap-1.5 rounded-full text-xs font-medium text-white xl:px-2.5 xl:py-1 ${isPrivateRoomHandle(handle) ? "xl:bg-red-600" : "xl:bg-emerald-600"
-                    }`}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full text-xs font-medium text-white xl:px-2.5 xl:py-1 ${
+                    isPrivateRoomHandle(handle) ? "xl:bg-red-600" : "xl:bg-emerald-600"
+                  }`}
                 >
                   <span
-                    className={`h-2 w-2 shrink-0 rounded-full xl:hidden ${isPrivateRoomHandle(handle) ? "bg-red-600" : "bg-emerald-600"
-                      }`}
+                    className={`h-2 w-2 shrink-0 rounded-full xl:hidden ${
+                      isPrivateRoomHandle(handle) ? "bg-red-600" : "bg-emerald-600"
+                    }`}
                   />
                   <span className="hidden xl:inline">
                     {isPrivateRoomHandle(handle) ? "Sala privada" : "Sala pública"}
@@ -5117,7 +5126,7 @@ export function WatchRoom({ handle }: { handle: string }) {
             The ad card lives here (below the list) rather than in the chat
             column, so chat gets the full column to itself. */}
         {isWideLayout && !leftSidebarCollapsed && (
-          <aside className="flex h-full w-64 shrink-0 flex-col gap-3 2xl:w-72">
+          <aside className="flex h-full w-[300px] shrink-0 flex-col gap-3">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
               <div className="shrink-0 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
                 {participantsHeader}
@@ -5127,14 +5136,15 @@ export function WatchRoom({ handle }: { handle: string }) {
                   beside up to five status icons. */}
               <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">{participantsList}</div>
             </div>
-            {/* One at a time, not both: two ads stacked in a 256px column
-                read as a page made of advertising. The partner holds the
-                first minute because it is the ad this room sold itself.
-                Swapped rather than hidden, so each turn is a fresh Adsterra
-                creative — the partner's own state survives regardless, since
-                it lives in usePartnerAd above and not in this card. */}
+            {/* One at a time, not both: two ads stacked in this column
+                read as a page made of advertising. Swapped rather than
+                hidden, so each turn is a fresh creative. */}
             {showAdsterra ? (
-              <AdsterraNative className="shrink-0" label={false} />
+              adsterraFormat === "native" ? (
+                <AdsterraNative className="shrink-0" label={false} />
+              ) : (
+                <AdsterraBanner slot="room" className="shrink-0" />
+              )
             ) : (
               <PartnerCard partner={rawActivePartner} loaded={partnerLoaded} />
             )}
@@ -5225,23 +5235,23 @@ export function WatchRoom({ handle }: { handle: string }) {
                     </button>
                   )}
 
-                  <div className="basis-full flex justify-center">
-                    {videoSourceBlockedReason ? (
-                      <p className="text-sm text-zinc-500 dark:text-zinc-500">
-                        O dono da sala limitou o que os participantes podem transmitir aqui.
-                      </p>
-                    ) : (
-                    <button
-                      type="button"
-                      onClick={openAddVideoSourcePopup}
-                      className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
-                    >
-                      <MdOutlineOndemandVideo className="h-5 w-5 shrink-0" />
-                      Adicionar fonte de vídeo
-                      <BetaMark />
-                    </button>
-                    )}
-                  </div>
+                  {videoSourceBlockedReason ? (
+                    <p className="basis-full text-center text-sm text-zinc-500 dark:text-zinc-500">
+                      O dono da sala limitou o que os participantes podem transmitir aqui.
+                    </p>
+                  ) : (
+                    <div className="basis-full flex justify-center">
+                      <button
+                        type="button"
+                        onClick={openAddVideoSourcePopup}
+                        className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                      >
+                        <MdOutlineOndemandVideo className="h-5 w-5 shrink-0" />
+                        Adicionar fonte de vídeo
+                        <BetaMark />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -5423,7 +5433,7 @@ export function WatchRoom({ handle }: { handle: string }) {
                 budget affords on the Adsterra minute; see
                 NEXT_PUBLIC_ADSTERRA_BANNER_MOBILE_KEY. */}
             {showAdsterra ? (
-              <AdsterraBanner className="shrink-0" />
+              <AdsterraBanner slot="room" className="shrink-0" />
             ) : (
               <PartnerCard partner={rawActivePartner} loaded={partnerLoaded} />
             )}

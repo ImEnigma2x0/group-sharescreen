@@ -119,6 +119,13 @@ export const MOBILE_BANNER = parseBanner(
   process.env.NEXT_PUBLIC_ADSTERRA_BANNER_DOMAIN
 );
 
+export const ROOM_BANNER = parseBanner(
+  process.env.NEXT_PUBLIC_ADSTERRA_ROOM_BANNER_KEY,
+  process.env.NEXT_PUBLIC_ADSTERRA_ROOM_BANNER_WIDTH || "300",
+  process.env.NEXT_PUBLIC_ADSTERRA_ROOM_BANNER_HEIGHT || "250",
+  process.env.NEXT_PUBLIC_ADSTERRA_ROOM_BANNER_DOMAIN || process.env.NEXT_PUBLIC_ADSTERRA_BANNER_DOMAIN
+);
+
 /** The native-banner unit: one script, and a container it fills. */
 export interface AdsterraNative {
   /** Full script URL, exactly as Adsterra gives it. */
@@ -195,28 +202,45 @@ function fillProbeScript(timeoutMs: number): string {
   return `<script>
 (function () {
   var done = false;
-  function tell(filled, reason) {
+  function tell(filled, reason, size) {
     if (done) return;
     done = true;
     parent.postMessage(
-      { source: "${AD_MESSAGE_SOURCE}", type: "status", filled: filled, reason: reason },
+      {
+        source: "${AD_MESSAGE_SOURCE}",
+        type: "status",
+        filled: filled,
+        reason: reason,
+        width: size ? size.width : undefined,
+        height: size ? size.height : undefined
+      },
       "*"
     );
   }
-  function painted() {
+  function measureSize() {
     var nodes = document.body.querySelectorAll("iframe,img,a,div,ins,span,canvas");
+    var maxW = 0;
+    var maxH = 0;
     for (var i = 0; i < nodes.length; i++) {
       var box = nodes[i].getBoundingClientRect();
-      // Both dimensions, because an empty container still reports its
-      // column's full width while being nothing at all to look at.
-      if (box.width > 1 && box.height > 1) return true;
+      if (box.width > maxW) maxW = box.width;
+      if (box.height > maxH) maxH = box.height;
     }
-    return false;
+    if (maxW > 1 && maxH > 1) {
+      return { width: Math.round(maxW), height: Math.round(maxH) };
+    }
+    return null;
   }
   var deadline = Date.now() + ${timeoutMs};
   var timer = setInterval(function () {
     if (window.__adsterraBlocked) { clearInterval(timer); tell(false, "blocked"); return; }
-    if (painted()) { clearInterval(timer); tell(true, null); return; }
+    var sz = measureSize();
+    if (sz) {
+      clearInterval(timer);
+      tell(true, null, sz);
+      parent.postMessage({ source: "${AD_MESSAGE_SOURCE}", type: "size", width: sz.width, height: sz.height }, "*");
+      return;
+    }
     if (Date.now() > deadline) { clearInterval(timer); tell(false, "empty"); }
   }, 150);
 })();
@@ -313,7 +337,7 @@ ${fillProbeScript(NATIVE_FILL_TIMEOUT_MS)}
 
 
 /** Which unit a frame request is for. The only input the route accepts. */
-export type AdSlot = "desktop" | "mobile" | "native";
+export type AdSlot = "desktop" | "mobile" | "native" | "room";
 
 /**
  * Where a slot's document lives.
@@ -330,13 +354,15 @@ export function adFrameUrl(slot: AdSlot): string {
 export function bannerForSlot(slot: AdSlot): AdsterraBanner | null {
   if (slot === "desktop") return DESKTOP_BANNER;
   if (slot === "mobile") return MOBILE_BANNER;
+  if (slot === "room") return ROOM_BANNER || DESKTOP_BANNER;
   return null;
 }
 
 /** What an ad frame is allowed to say to the page that hosts it. */
 export type AdFrameMessage =
-  | { type: "status"; filled: boolean; reason: "blocked" | "empty" | null }
-  | { type: "height"; height: number };
+  | { type: "status"; filled: boolean; reason: "blocked" | "empty" | null; width?: number; height?: number }
+  | { type: "height"; height: number }
+  | { type: "size"; width: number; height: number };
 
 /**
  * Reads one `message` event's payload, or null if it is not ours.
@@ -355,18 +381,47 @@ export function parseAdFrameMessage(data: unknown): AdFrameMessage | null {
     filled?: unknown;
     reason?: unknown;
     height?: unknown;
+    width?: unknown;
   };
   if (message.source !== AD_MESSAGE_SOURCE) return null;
   if (message.type === "status" && typeof message.filled === "boolean") {
     const reason =
       message.reason === "blocked" || message.reason === "empty" ? message.reason : null;
-    return { type: "status", filled: message.filled, reason };
+    const res: {
+      type: "status";
+      filled: boolean;
+      reason: "blocked" | "empty" | null;
+      width?: number;
+      height?: number;
+    } = {
+      type: "status",
+      filled: message.filled,
+      reason,
+    };
+    if (typeof message.width === "number" && Number.isFinite(message.width) && message.width > 0) {
+      res.width = message.width;
+    }
+    if (typeof message.height === "number" && Number.isFinite(message.height) && message.height > 0) {
+      res.height = message.height;
+    }
+    return res;
   }
   if (message.type === "height" && typeof message.height === "number") {
     // A height that is not a real number would become a style nobody can see
     // past — NaN collapses the slot, Infinity swallows the page.
     if (!Number.isFinite(message.height) || message.height < 0) return null;
     return { type: "height", height: message.height };
+  }
+  if (message.type === "size" && typeof message.width === "number" && typeof message.height === "number") {
+    if (
+      !Number.isFinite(message.width) ||
+      !Number.isFinite(message.height) ||
+      message.width <= 0 ||
+      message.height <= 0
+    ) {
+      return null;
+    }
+    return { type: "size", width: message.width, height: message.height };
   }
   return null;
 }
