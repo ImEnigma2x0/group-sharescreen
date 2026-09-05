@@ -142,6 +142,7 @@ for (const height of [Number.NaN, Number.POSITIVE_INFINITY, -10, "320"]) {
 assert.equal(adFrameUrl("desktop"), "/ads/frame?slot=desktop");
 assert.equal(adFrameUrl("mobile"), "/ads/frame?slot=mobile");
 assert.equal(adFrameUrl("native"), "/ads/frame?slot=native");
+assert.equal(adFrameUrl("room"), "/ads/frame?slot=room");
 
 // Adsterra decides whether to serve by checking the referrer against the
 // publisher's registered domains, so losing it means an empty slot.

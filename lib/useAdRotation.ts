@@ -25,7 +25,7 @@ export const AD_ROTATION_INTERVAL_MS = 60 * 1000;
  * slot, rather than the room blanking out every other minute.
  */
 export function useAdRotation(enabled: boolean): boolean {
-  const [showAdsterra, setShowAdsterra] = useState(false);
+  const [showAdsterra, setShowAdsterra] = useState(true);
 
   useEffect(() => {
     if (!enabled) return;

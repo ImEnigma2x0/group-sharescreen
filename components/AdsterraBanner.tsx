@@ -6,10 +6,12 @@ import {
   DESKTOP_BANNER,
   IFRAME_SANDBOX,
   MOBILE_BANNER,
+  ROOM_BANNER,
   BANNER_FILL_TIMEOUT_MS,
   adFrameUrl,
   parseAdFrameMessage,
   type AdsterraBanner as BannerUnit,
+  type AdSlot,
 } from "@/lib/adsterra";
 import {
   reportAdsterraFill,
@@ -29,9 +31,11 @@ export function AdsterraBanner({
    * where the slot is obviously an ad.
    */
   label = false,
+  slot,
 }: {
   className?: string;
   label?: boolean;
+  slot?: "desktop" | "mobile" | "room";
 }) {
   const allowed = useAdsAllowed();
   // Once anything has established that Adsterra cannot get through, this slot
@@ -47,6 +51,7 @@ export function AdsterraBanner({
   // this browser, and treating it as if it did would take down every other
   // slot on the page over one empty response.
   const [empty, setEmpty] = useState(false);
+  const [renderedSize, setRenderedSize] = useState<{ width: number; height: number } | null>(null);
 
   // The wide unit above `sm`, the phone one below, and each falls back to the
   // other when only one is configured — a deployment with a single key should
@@ -55,7 +60,11 @@ export function AdsterraBanner({
   // renders first, which is the right way round: it is the smaller hole to
   // leave in a layout that is about to reflow.
   const useDesktopUnit = wide ? DESKTOP_BANNER !== null : MOBILE_BANNER === null;
-  const unit: BannerUnit | null = useDesktopUnit ? DESKTOP_BANNER : MOBILE_BANNER;
+  const isRoom = slot === "room";
+  const unit: BannerUnit | null = isRoom
+    ? (ROOM_BANNER || (useDesktopUnit ? DESKTOP_BANNER : MOBILE_BANNER))
+    : (useDesktopUnit ? DESKTOP_BANNER : MOBILE_BANNER);
+  const frameSlot: AdSlot = isRoom && ROOM_BANNER ? "room" : useDesktopUnit ? "desktop" : "mobile";
 
   const rendering = allowed && !blocked && !empty && unit !== null;
 
@@ -70,8 +79,16 @@ export function AdsterraBanner({
       // means "this slot's frame and nothing else".
       if (!frameRef.current || event.source !== frameRef.current.contentWindow) return;
       const message = parseAdFrameMessage(event.data);
-      if (message?.type !== "status") return;
+      if (!message) return;
+      if (message.type === "size") {
+        setRenderedSize({ width: message.width, height: message.height });
+        return;
+      }
+      if (message.type !== "status") return;
       markSettled();
+      if (message.width && message.height) {
+        setRenderedSize({ width: message.width, height: message.height });
+      }
       // Only a refused request is a fact about the browser. An empty
       // response is a fact about this unit, and hides just this slot.
       if (message.reason === "blocked") reportAdsterraFill(false);
@@ -83,6 +100,9 @@ export function AdsterraBanner({
   }, [rendering, markSettled]);
 
   if (!rendering || !unit) return null;
+
+  const displayWidth = renderedSize ? renderedSize.width : unit.width;
+  const displayHeight = renderedSize ? renderedSize.height : unit.height;
 
   return (
     <div className={`flex flex-col items-center gap-1 ${className}`}>
@@ -96,8 +116,8 @@ export function AdsterraBanner({
           under somebody's thumb is the single most annoying thing a slot like
           this can do. */}
       <div
-        style={{ width: unit.width, height: unit.height }}
-        className="max-w-full overflow-hidden"
+        style={{ width: displayWidth, height: displayHeight }}
+        className="max-w-full overflow-hidden transition-[width,height] duration-200"
       >
         <iframe
           ref={frameRef}
@@ -109,10 +129,10 @@ export function AdsterraBanner({
           // A URL on this site rather than srcDoc — that is what gives the ad
           // script an origin, its cookies and a referrer Adsterra recognises.
           // See lib/adsterra.ts's header for what happened without it.
-          src={adFrameUrl(useDesktopUnit ? "desktop" : "mobile")}
+          src={adFrameUrl(frameSlot)}
           sandbox={IFRAME_SANDBOX}
-          width={unit.width}
-          height={unit.height}
+          width={displayWidth}
+          height={displayHeight}
           scrolling="no"
           referrerPolicy="no-referrer-when-downgrade"
           className="block max-w-full border-0"

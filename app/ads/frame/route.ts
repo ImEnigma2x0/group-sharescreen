@@ -23,7 +23,7 @@ import {
 // script host come from this deployment's own environment. A route that let a
 // caller name a script URL would be an XSS endpoint wearing an ad's clothes.
 
-const SLOTS: readonly AdSlot[] = ["desktop", "mobile", "native"];
+const SLOTS: readonly AdSlot[] = ["desktop", "mobile", "native", "room"];
 
 function isSlot(value: string | null): value is AdSlot {
   return value !== null && (SLOTS as readonly string[]).includes(value);

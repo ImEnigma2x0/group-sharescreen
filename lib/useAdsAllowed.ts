@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { isDesktopApp, isMobileApp } from "@/lib/desktop";
-import { DESKTOP_BANNER, MOBILE_BANNER, NATIVE_BANNER } from "@/lib/adsterra";
+import { DESKTOP_BANNER, MOBILE_BANNER, NATIVE_BANNER, ROOM_BANNER } from "@/lib/adsterra";
 import { useAdsterraEnabled } from "@/lib/useAdsterraEnabled";
 
 // "Is this running in the browser yet?", without a setState in an effect.
@@ -52,7 +52,7 @@ export function useAdsAllowed(): boolean {
 
   if (!hydrated || loading) return false;
   if (!switchedOn) return false;
-  if (!DESKTOP_BANNER && !MOBILE_BANNER && !NATIVE_BANNER) return false;
+  if (!DESKTOP_BANNER && !MOBILE_BANNER && !ROOM_BANNER && !NATIVE_BANNER) return false;
   if (isDesktopApp() || isMobileApp()) return false;
   return !account?.features?.includes("no_ads");
 }
@@ -69,9 +69,9 @@ export function useAdsAllowed(): boolean {
 export function useAdsterraAvailable(format: "banner" | "native"): boolean {
   const allowed = useAdsAllowed();
   if (!allowed) return false;
-  // The banner component falls back between the two units, so either one is
+  // The banner component falls back between the units, so either one is
   // enough for it to render something.
   return format === "native"
     ? NATIVE_BANNER !== null
-    : DESKTOP_BANNER !== null || MOBILE_BANNER !== null;
+    : DESKTOP_BANNER !== null || MOBILE_BANNER !== null || ROOM_BANNER !== null;
 }

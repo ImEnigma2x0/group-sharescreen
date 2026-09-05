@@ -56,7 +56,7 @@ export function getAdminToken(): string | null {
   return cachedToken;
 }
 
-function setAdminToken(token: string | null) {
+export function setAdminToken(token: string | null) {
   cachedToken = token;
   initialized = true;
   if (typeof window !== "undefined") {
