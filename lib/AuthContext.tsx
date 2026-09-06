@@ -20,6 +20,8 @@ import {
   registerAccount,
   completeOAuthSignup as completeOAuthSignupRequest,
   unlinkOAuthProvider as unlinkOAuthProviderRequest,
+  updateProfile as updateProfileRequest,
+  type UpdateProfileInput,
   logoutAccount,
 } from "./accountApi";
 import { signalingClient, getStoredName } from "./signalingClient";
@@ -53,6 +55,7 @@ type AuthContextValue = {
   // Detaches a provider, then re-resolves so the panel reflects it. Rejects
   // (with the API's message) when it would leave the account with no way in.
   unlinkProvider: (provider: string) => Promise<void>;
+  updateProfile: (input: UpdateProfileInput) => Promise<Account>;
   logout: () => void;
   // The current identity's points, whichever kind of identity that is: the
   // account's own when signed in, this browser's guest total otherwise (see
@@ -216,6 +219,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const updateProfile = useCallback(async (input: UpdateProfileInput) => {
+    const updated = await updateProfileRequest(input);
+    setAccount(updated);
+    return updated;
+  }, []);
+
   // Turns a stored (or freshly obtained, via login()/register() above)
   // account token into an actual signaling registration — lives here rather
   // than in any one page so it also fires on a direct link straight into a
@@ -292,6 +301,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       completeOAuthSignup,
       unlinkProvider,
+      updateProfile,
       logout,
       refresh,
     }),
@@ -304,6 +314,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       completeOAuthSignup,
       unlinkProvider,
+      updateProfile,
       logout,
       refresh,
     ]

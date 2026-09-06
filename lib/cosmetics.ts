@@ -7,7 +7,7 @@
 import { getAccountToken } from "./accountApi";
 import { getSignalingHttpBase } from "./roomsApi";
 
-export type CosmeticProductType = "name_color";
+export type CosmeticProductType = "name_color" | "profile_color";
 
 export type CosmeticProduct = {
   id: string;
@@ -21,6 +21,7 @@ export type CosmeticsCatalogResponse = {
   catalog: CosmeticProduct[];
   ownedCosmetics: string[];
   equippedNameColor: string | null;
+  equippedProfileColor?: string | null;
 };
 
 async function parseErrorMessage(res: Response, fallback: string): Promise<string> {
@@ -46,6 +47,7 @@ export type PurchaseCosmeticResult = {
   points: number;
   ownedCosmetics: string[];
   equippedNameColor: string | null;
+  equippedProfileColor?: string | null;
 };
 
 export async function purchaseCosmetic(productId: string): Promise<PurchaseCosmeticResult> {

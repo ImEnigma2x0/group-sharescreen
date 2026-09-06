@@ -144,6 +144,47 @@ export async function prepareChatImage(file: File): Promise<PreparedChatImage> {
   return { dataUrl: original, byteLength: originalBytes, mimeType: file.type };
 }
 
+const MAX_AVATAR_DIMENSION = 512;
+
+/**
+ * Prepares an avatar picture: crops to square and resizes to up to 512x512,
+ * preserving GIFs for animated avatars.
+ */
+export async function prepareAvatarImage(file: File): Promise<PreparedChatImage> {
+  const original = await readAsDataUrl(file);
+  const originalBytes = dataUrlByteLength(original);
+
+  if (file.type === "image/gif") {
+    return { dataUrl: original, byteLength: originalBytes, mimeType: file.type };
+  }
+
+  try {
+    const img = await loadImage(original);
+    const size = Math.min(img.naturalWidth, img.naturalHeight);
+    const sx = (img.naturalWidth - size) / 2;
+    const sy = (img.naturalHeight - size) / 2;
+    const destSize = Math.min(MAX_AVATAR_DIMENSION, size);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = destSize;
+    canvas.height = destSize;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas indisponível");
+    ctx.drawImage(img, sx, sy, size, size, 0, 0, destSize, destSize);
+
+    const mimeType = supportsWebpEncoding() ? "image/webp" : "image/jpeg";
+    const encoded = canvas.toDataURL(mimeType, 0.88);
+    const encodedBytes = dataUrlByteLength(encoded);
+    if (encoded.startsWith(`data:${mimeType}`) && encodedBytes < originalBytes) {
+      return { dataUrl: encoded, byteLength: encodedBytes, mimeType };
+    }
+  } catch {
+    // Fallback if canvas draw fails
+  }
+
+  return { dataUrl: original, byteLength: originalBytes, mimeType: file.type };
+}
+
 export type SendChatImagesResult = { ok: true; urls: string[] } | { ok: false; error: string };
 
 /**
