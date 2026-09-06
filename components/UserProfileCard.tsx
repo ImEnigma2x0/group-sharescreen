@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { fetchUserProfile, formatDuration, type UserProfile } from "@/lib/userProfile";
 import { VerifiedBadgeIcon, MicIcon, ScreenIcon } from "@/components/icons";
-import { BsCoin, BsClock } from "react-icons/bs";
+import { BsCoin, BsClock, BsShop } from "react-icons/bs";
 import { hasVerifiedBadge } from "@/lib/entitlements";
 import { SocialActions } from "@/components/SocialActions";
 import { useAuth } from "@/lib/AuthContext";
@@ -14,6 +14,7 @@ import { getAccountToken } from "@/lib/accountApi";
 import { fetchCosmeticsCatalog, type CosmeticProduct } from "@/lib/cosmetics";
 import { prepareAvatarImage, CHAT_IMAGE_ACCEPT, CHAT_IMAGE_MAX_BYTES } from "@/lib/chatImage";
 import { MdEdit, MdPhotoCamera, MdDeleteOutline } from "react-icons/md";
+import useNtPopups from "ntpopups";
 
 // A person's public profile, as a self-contained card.
 //
@@ -169,6 +170,7 @@ function ProfileContent({
 }) {
   const { account: authAccount, updateProfile, refresh: refreshAuth } = useAuth();
   const state = useSignaling();
+  const { openPopup } = useNtPopups();
   const { account, live } = profile;
   const isOwner = Boolean(authAccount && authAccount.id === account.id);
 
@@ -193,7 +195,7 @@ function ProfileContent({
     setAvatarDataUrl(undefined);
   }, [account]);
 
-  // Load cosmetics when entering edit mode to populate owned background colors
+  // Load cosmetics when entering edit mode or when owned items change
   useEffect(() => {
     if (!isEditing || !isOwner) return;
     let cancelled = false;
@@ -211,7 +213,7 @@ function ProfileContent({
     return () => {
       cancelled = true;
     };
-  }, [isEditing, isOwner]);
+  }, [isEditing, isOwner, authAccount?.ownedCosmetics]);
 
   async function handleAvatarPicked(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -419,9 +421,19 @@ function ProfileContent({
 
             {/* Background color from store */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Cor do background
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Cor do background
+                </label>
+                <button
+                  type="button"
+                  onClick={() => openPopup("cosmetics_store", { data: {} })}
+                  className="flex items-center gap-1 text-xs font-medium text-emerald-600 transition hover:text-emerald-700 hover:underline dark:text-emerald-400 dark:hover:text-emerald-300"
+                >
+                  <BsShop className="h-3 w-3" />
+                  Loja de cosméticos
+                </button>
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -457,9 +469,16 @@ function ProfileContent({
               </div>
 
               {ownedBgColors.length === 0 && (
-                <p className="mt-1 rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-xs text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/50 dark:text-zinc-400">
-                  Cores de background poderão ser adquiridas com pontos na loja de cosméticos. Suas cores compradas aparecerão aqui para seleção.
-                </p>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-xs text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/50 dark:text-zinc-400">
+                  <span>Você ainda não possui cores de background compradas na loja.</span>
+                  <button
+                    type="button"
+                    onClick={() => openPopup("cosmetics_store", { data: {} })}
+                    className="shrink-0 font-semibold text-emerald-600 underline hover:text-emerald-700 dark:text-emerald-400"
+                  >
+                    Comprar cores
+                  </button>
+                </div>
               )}
             </div>
 
