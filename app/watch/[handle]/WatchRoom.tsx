@@ -362,7 +362,6 @@ function QualityControls({
   setShareResolution,
   shareBitrate,
   setShareBitrate,
-  bitrateLimitsPicture,
   features,
   isSharing,
   meshCapacity,
@@ -379,7 +378,6 @@ function QualityControls({
   | "setShareResolution"
   | "shareBitrate"
   | "setShareBitrate"
-  | "bitrateLimitsPicture"
   | "isSharing"
   | "meshCapacity"
   | "meshTopology"
@@ -437,16 +435,6 @@ function QualityControls({
               clamps fps back to 30 when switching *into* "text" for the
               same reason — this is the mirror case, raising fps while
               already there, and needs the same threshold. */}
-          {/* The bitrate dial caps the tier ladder too (see affordableTier),
-              and that cap has to be visible or the fps/resolution picker
-              silently means something other than what it says. */}
-          {bitrateLimitsPicture && (
-            <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
-              Sua taxa de bits não sustenta essa resolução/fps — quem assistir
-              recebe um pouco menos para a imagem não travar. Aumente
-              &quot;Taxa de bits&quot; para liberar tudo o que você escolheu.
-            </p>
-          )}
           {shareProfile === "text" && shareFps > 30 && (
             <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
               Acima de 30fps, escolha &quot;Equilibrado&quot; ou &quot;Vídeo /
@@ -605,7 +593,6 @@ function ShareControls({
     | "setShareResolution"
     | "shareBitrate"
     | "setShareBitrate"
-    | "bitrateLimitsPicture"
     | "isSharing"
     | "meshCapacity"
     | "meshTopology"
@@ -981,7 +968,6 @@ export function WatchRoom({ handle }: { handle: string }) {
     shareFps,
     setShareFps,
     shareBitrate,
-    bitrateLimitsPicture,
     setShareBitrate,
     smartQualityEnabled,
     shareProfile,
@@ -3656,7 +3642,6 @@ export function WatchRoom({ handle }: { handle: string }) {
     shareResolution,
     setShareResolution,
     shareBitrate,
-    bitrateLimitsPicture,
     setShareBitrate,
     hasAccount: Boolean(state.account),
     // The resolved entitlement list from the API (see the account's
