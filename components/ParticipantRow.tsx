@@ -18,6 +18,7 @@ import {
 import { FaCrown } from "react-icons/fa";
 import { VolumeSlider } from "./VolumeSlider";
 import { DisplayUserName } from "./DisplayUserName";
+import { UserAvatar } from "./UserAvatar";
 import { Tooltip, Popover } from "./Tooltip";
 import { MAX_GAIN } from "@/lib/audioGain";
 
@@ -41,6 +42,7 @@ export function ParticipantRow({
   connectionLost = false,
   verified = false,
   nameColor,
+  avatarUrl,
   isOwner = false,
   isAdmin = false,
   isApp = false,
@@ -88,6 +90,9 @@ export function ParticipantRow({
   // Cosmetics-store name color (see PeerInfo.nameColor) — undefined/null for
   // none equipped.
   nameColor?: string | null;
+  // Profile picture (see PeerInfo.avatarUrl). Null/undefined falls back to
+  // the person's initial — see UserAvatar.
+  avatarUrl?: string | null;
   // Owns this room (see server/roomStore.ts's RoomRecord.ownerId) — gets a
   // gold crown right after the name. Exactly one person in a room has this
   // at a time; ownership moves on when they leave.
@@ -177,6 +182,10 @@ export function ParticipantRow({
       }`}
     >
       <span className="flex min-w-0 items-baseline gap-1">
+        {/* self-center rather than the row's baseline: a circle has no
+            baseline to sit on, and letting it inherit one drops it below the
+            name it belongs to. */}
+        <UserAvatar src={avatarUrl} name={name} size={22} className="self-center" />
         {canOpenProfile && onOpenProfile ? (
           // A button, not a styled link: this goes nowhere, and marking it up
           // as navigation would promise a middle-click and a "copy link
