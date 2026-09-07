@@ -206,6 +206,12 @@ export async function cancelPremium(): Promise<{ ok: boolean; error?: string }> 
 /** Whether a subscription is paying right now, for the account page's copy. */
 export function isPremiumActive(premium: PremiumState | null | undefined): boolean {
   if (!premium) return false;
+  // Pix is the paid stretch and nothing else — mirroring the API's
+  // accountTier. `status` there describes the last charge that was synced,
+  // which for somebody who generated a second QR is a charge they never paid;
+  // reading it here is what made the page say "sem assinatura" to people with
+  // weeks left.
+  if (premium.method === "pix") return Date.now() < premium.currentPeriodEnd;
   if (premium.status === "pending") return false;
   return Date.now() < premium.currentPeriodEnd;
 }

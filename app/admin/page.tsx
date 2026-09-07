@@ -1,105 +1,80 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { adminLogin, adminLogout, useAdminToken } from "@/lib/adminApi";
-import { prewarmCaptcha } from "@/lib/turnstile";
-import { ButtonSpinner } from "@/components/ButtonSpinner";
+import { AccountModal, type AccountModalMode } from "@/components/AccountModal";
+import { useAuth } from "@/lib/AuthContext";
+import { AdminLogPanel } from "./AdminLogPanel";
 import { DashboardPanel } from "./DashboardPanel";
 
 // Site administration: statistics, announcements, partners, supporters, the
-// desktop update nudge, anti-spam, banned words and bans.
+// desktop update nudge, anti-spam, banned words, bans, ads, comped plans — and
+// the record of everything an administrator did.
 //
 // Live moderation — the room list, the invisible moderation viewer and the
-// camera wall — is deliberately not here any more. It lives in its own app
-// (../sharescreen-admin), against this same API, because it is a different
-// job done by a different person at a different time: this page is about the
-// service's configuration, that one is about who is on it right now. There is
-// no tab bar left because there is only one thing on this page again.
+// camera wall — is deliberately not here. It lives in its own app
+// (../sharescreen-admin), against this same API, because it is a different job
+// done by a different person at a different time: this page is about the
+// service's configuration, that one is about who is on it right now.
+//
+// There is no login form here any more, and that is the point of this version:
+// being an administrator is a *flag on an account*, not a second credential.
+// The page used to mint and keep a token of its own, which meant two ways to
+// be signed in to one site — two expiries, and a panel that could be logged in
+// while the header said nobody was. Now it reads the same session everything
+// else does and checks for the flag the API already gates on (requireAdmin).
+
+type Tab = "painel" | "registros";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "painel", label: "Painel" },
+  { id: "registros", label: "Registros" },
+];
+
 export default function AdminPage() {
-  const token = useAdminToken();
-  const [user, setUser] = useState("");
-  const [password, setPassword] = useState("");
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [loggingIn, setLoggingIn] = useState(false);
+  const { account, loading } = useAuth();
+  const [tab, setTab] = useState<Tab>("painel");
+  const [accountModal, setAccountModal] = useState<AccountModalMode | null>(null);
 
-  // Mint the captcha token while this form is being filled in, not when it is
-  // submitted. Turnstile does its work when its widget renders, so asking for
-  // a token at submit time puts a second or two between the button and
-  // anything happening; the seconds somebody spends typing credentials are free.
-  useEffect(() => {
-    prewarmCaptcha("login");
-  }, []);
+  const isAdmin = Boolean(account?.flags.includes("ADMIN"));
 
-  // No captcha branch here any more: adminLogin mints a Turnstile token on the
-  // way out, and Cloudflare shows a challenge itself if it wants one, before
-  // the request is sent. What used to need a modal and a re-submit is now just
-  // a call that occasionally takes a few seconds longer.
-  async function submitLogin() {
-    setLoggingIn(true);
-    setLoginError(null);
-    try {
-      await adminLogin(user, password);
-      setPassword("");
-    } catch (err) {
-      setLoginError(err instanceof Error ? err.message : "Usuário ou senha inválidos.");
-    } finally {
-      setLoggingIn(false);
-    }
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 py-16 dark:bg-black">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">Carregando…</p>
+      </div>
+    );
   }
 
-  function handleLogin(e: FormEvent) {
-    e.preventDefault();
-    void submitLogin();
-  }
-
-  function handleLogout() {
-    adminLogout();
-  }
-
-  if (!token) {
+  if (!account || !isAdmin) {
     return (
       <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 py-16 dark:bg-black">
         <main className="w-full max-w-md rounded-2xl border border-black/10 bg-white p-8 shadow-sm dark:border-white/10 dark:bg-zinc-950">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
             Administração
           </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Acesso restrito. Entre com as credenciais de administrador.
+          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+            {/* Deliberately the same message either way. "You are signed in but
+                not an administrator" tells somebody probing this URL which
+                half they got right. */}
+            Acesso restrito.
           </p>
-          <form onSubmit={handleLogin} className="mt-8 flex flex-col gap-3">
-            <label htmlFor="user" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Usuário
-            </label>
-            <input
-              id="user"
-              autoFocus
-              autoComplete="username"
-              value={user}
-              onChange={(e) => setUser(e.target.value)}
-              className="rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-            />
-            <label htmlFor="password" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Senha
-            </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-            />
-            {loginError && <p className="text-sm text-red-500">{loginError}</p>}
+          {!account && (
             <button
-              type="submit"
-              disabled={!user.trim() || !password || loggingIn}
-              className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-zinc-950 px-4 py-2.5 font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+              type="button"
+              onClick={() => setAccountModal("login")}
+              className="mt-6 w-full rounded-lg bg-zinc-950 px-4 py-2.5 font-medium text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
             >
-              {loggingIn && <ButtonSpinner />}
-              {loggingIn ? "Entrando..." : "Entrar"}
+              Entrar
             </button>
-          </form>
+          )}
+          <Link
+            href="/"
+            className="mt-3 block text-center text-sm text-zinc-500 underline underline-offset-2 hover:text-zinc-900 dark:hover:text-zinc-100"
+          >
+            Voltar ao início
+          </Link>
+          <AccountModal mode={accountModal} onModeChange={setAccountModal} />
         </main>
       </div>
     );
@@ -113,27 +88,41 @@ export default function AdminPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
               Admin
             </h1>
+            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              Conectado como @{account.username}
+            </p>
           </div>
-          <div className="flex shrink-0 gap-2">
-            <Link
-              href="/"
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
-            >
-              Início
-            </Link>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
-            >
-              Sair
-            </button>
-          </div>
+          <Link
+            href="/"
+            className="shrink-0 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            Início
+          </Link>
         </div>
 
-        <div className="mt-6">
-          <DashboardPanel />
+        {/* No "sair" button: the session here is the site's session, and
+            signing out of it from this corner would also sign them out of the
+            room they left open. The account menu in the header is where that
+            lives, for the whole site at once. */}
+        <div className="mt-6 flex gap-1 border-b border-zinc-200 dark:border-zinc-800">
+          {TABS.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              onClick={() => setTab(entry.id)}
+              aria-current={tab === entry.id ? "page" : undefined}
+              className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition ${
+                tab === entry.id
+                  ? "border-zinc-950 text-zinc-950 dark:border-zinc-50 dark:text-zinc-50"
+                  : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              }`}
+            >
+              {entry.label}
+            </button>
+          ))}
         </div>
+
+        <div className="mt-6">{tab === "painel" ? <DashboardPanel /> : <AdminLogPanel />}</div>
       </div>
     </div>
   );

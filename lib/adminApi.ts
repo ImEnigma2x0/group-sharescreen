@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { getAccountToken } from "./accountApi";
 import { getSignalingHttpBase } from "./roomsApi";
 import { getCaptchaToken } from "./turnstile";
 import type {
@@ -242,25 +243,27 @@ export async function clearAnnouncement(): Promise<void> {
 // as a signal to drop the stored token (mirrors fetchAdminRooms above), and
 // throws with the server's own error message when one is provided.
 async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getAdminToken();
+  // The account's own session, not a second one.
+  //
+  // This used to keep an administrator token in its own localStorage slot,
+  // minted by a login form of its own. That was a second way to be signed in
+  // to the same site: two tokens, two expiries, and a panel that could be
+  // "logged in" while the header said nobody was. There is one session now,
+  // and being an administrator is a flag on the account behind it (see the
+  // API's requireAdmin) rather than a separate credential.
+  const token = getAccountToken();
   if (!token) throw new Error("unauthorized");
   const res = await fetch(`${getSignalingHttpBase()}${path}`, {
     ...init,
     headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
   });
-  if (res.status === 401) {
-    setAdminToken(null);
-    throw new Error("unauthorized");
-  }
+  if (res.status === 401) throw new Error("unauthorized");
   if (res.status === 204) return undefined as T;
   if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    throw new Error(
-      (data && typeof data === "object" && "error" in data && String(data.error)) ||
-        `Falha na requisição (status ${res.status})`
-    );
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error ?? `Erro ${res.status}`);
   }
-  return res.json() as Promise<T>;
+  return (await res.json()) as T;
 }
 
 export type AdminStats = {
@@ -629,4 +632,101 @@ export async function sendClientEval(code: string, filter: EvalFilter): Promise<
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code, filter }),
   });
+}
+
+// ─── Conceder plano ───────────────────────────────────────────────────────
+//
+// Comping somebody a plan by hand (see the API's premiumRoutes admin block).
+// Deliberately its own set of calls rather than reusing the buyer-facing
+// /premium routes: those are about money, and nothing here involves any.
+
+export interface AdminAccountHit {
+  id: string;
+  username: string;
+  displayName: string;
+  /** The flags actually stored — never the projection, which adds PRO. */
+  flags: string[];
+  premium: { method?: string; currentPeriodEnd: number; status: string } | null;
+}
+
+export interface AdminPlanOption {
+  id: string;
+  title: string;
+  priceLabel: string;
+  active: boolean;
+}
+
+/**
+ * One account search for the whole admin area, so "find the person" behaves
+ * the same wherever it is asked.
+ *
+ * `canEditAdminFlags` is what to *offer*: the server enforces the ADMIN /
+ * ADMIN_MASTER rules again on every write, whatever this page draws.
+ */
+export async function searchAdminAccounts(
+  query: string
+): Promise<{ accounts: AdminAccountHit[]; canEditAdminFlags: boolean }> {
+  return adminFetch<{ accounts: AdminAccountHit[]; canEditAdminFlags: boolean }>(
+    `/admin/accounts?q=${encodeURIComponent(query)}`
+  );
+}
+
+/** Replaces an account's flags with exactly this list. */
+export async function setAccountFlags(userId: string, flags: string[]): Promise<string[]> {
+  const data = await adminFetch<{ account: { flags: string[] } }>(
+    `/admin/accounts/${encodeURIComponent(userId)}/flags`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ flags }),
+    }
+  );
+  return data.account.flags;
+}
+
+export async function fetchAdminPlans(): Promise<AdminPlanOption[]> {
+  const data = await adminFetch<{ plans: AdminPlanOption[] }>("/admin/premium/plans");
+  return data.plans;
+}
+
+export async function grantPremium(userId: string, planId: string, days: number): Promise<void> {
+  await adminFetch("/admin/premium/grant", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, planId, days }),
+  });
+}
+
+export async function revokePremiumGrant(userId: string): Promise<void> {
+  await adminFetch(`/admin/premium/grant/${encodeURIComponent(userId)}`, { method: "DELETE" });
+}
+
+// ─── Registro de ações ────────────────────────────────────────────────────
+
+export interface AdminLogEntry {
+  id: string;
+  adminId: string;
+  adminUsername: string;
+  method: string;
+  path: string;
+  status: number;
+  details: string;
+  ip: string;
+  ts: number;
+}
+
+/**
+ * The administrators' record. `canDelete` says whether to draw the delete
+ * control — the server enforces it regardless (only ADMIN_MASTER), so this is
+ * what to *show*, never what is allowed.
+ */
+export async function fetchAdminLog(
+  before?: number
+): Promise<{ entries: AdminLogEntry[]; canDelete: boolean }> {
+  const query = before ? `?before=${before}` : "";
+  return adminFetch<{ entries: AdminLogEntry[]; canDelete: boolean }>(`/admin/logs${query}`);
+}
+
+export async function deleteAdminLogEntry(id: string): Promise<void> {
+  await adminFetch(`/admin/logs/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
