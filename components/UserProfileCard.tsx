@@ -12,7 +12,7 @@ import { useSignaling } from "@/lib/useSignaling";
 import { signalingClient } from "@/lib/signalingClient";
 import { getAccountToken } from "@/lib/accountApi";
 import { fetchCosmeticsCatalog, type CosmeticProduct } from "@/lib/cosmetics";
-import { prepareAvatarImage, CHAT_IMAGE_ACCEPT, CHAT_IMAGE_MAX_BYTES } from "@/lib/chatImage";
+import { prepareAvatarImage, AVATAR_IMAGE_ACCEPT, AVATAR_IMAGE_MAX_BYTES } from "@/lib/avatarImage";
 import { MdEdit, MdPhotoCamera, MdDeleteOutline } from "react-icons/md";
 import useNtPopups from "ntpopups";
 
@@ -219,8 +219,8 @@ function ProfileContent({
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
-    if (file.size > CHAT_IMAGE_MAX_BYTES) {
-      setError(`A imagem deve ter no máximo ${Math.round(CHAT_IMAGE_MAX_BYTES / (1024 * 1024))} MB.`);
+    if (file.size > AVATAR_IMAGE_MAX_BYTES) {
+      setError(`A imagem deve ter no máximo ${Math.round(AVATAR_IMAGE_MAX_BYTES / (1024 * 1024))} MB.`);
       return;
     }
     try {
@@ -349,7 +349,7 @@ function ProfileContent({
         <input
           ref={fileInputRef}
           type="file"
-          accept={CHAT_IMAGE_ACCEPT}
+          accept={AVATAR_IMAGE_ACCEPT}
           className="hidden"
           onChange={handleAvatarPicked}
         />
