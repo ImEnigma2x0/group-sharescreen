@@ -21,7 +21,16 @@ import {
 // administrator can demote every other one.
 
 /** Shown under the field so the vocabulary is not folklore. */
-const KNOWN_FLAGS = ["ADMIN", "ADMIN_MASTER", "VERIFIED"];
+const KNOWN_FLAGS = [
+  "ADMIN",
+  "ADMIN_MASTER",
+  "VERIFIED",
+  "STAFF",
+  "BUG_HUNTER",
+  "CONTRIBUITOR",
+  "BETA_MOBILE",
+  "BETA_TESTER",
+];
 const RESTRICTED = ["ADMIN", "ADMIN_MASTER"];
 
 export function AccountFlagsPanel() {

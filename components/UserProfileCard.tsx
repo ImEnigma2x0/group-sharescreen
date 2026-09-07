@@ -15,6 +15,7 @@ import { fetchCosmeticsCatalog, type CosmeticProduct } from "@/lib/cosmetics";
 import { prepareAvatarImage, AVATAR_IMAGE_ACCEPT, AVATAR_IMAGE_MAX_BYTES } from "@/lib/avatarImage";
 import { MdEdit, MdPhotoCamera, MdDeleteOutline } from "react-icons/md";
 import useNtPopups from "ntpopups";
+import { UserBadges } from "@/components/UserBadges";
 
 // A person's public profile, as a self-contained card.
 //
@@ -640,7 +641,10 @@ function ProfileContent({
                   </span>
                   {verified && <VerifiedBadgeIcon className="h-6 w-6 shrink-0 text-blue-500" />}
                 </h1>
-                <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">@{account.username}</p>
+                <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">@{account.username}</p>
+                  <UserBadges account={account} isOwner={isOwner} />
+                </div>
               </div>
               <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-sm font-semibold text-amber-700 dark:text-amber-400">
                 <BsCoin className="h-4 w-4 shrink-0" />
