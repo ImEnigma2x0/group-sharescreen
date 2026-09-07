@@ -352,3 +352,27 @@ export async function updateProfile(input: UpdateProfileInput): Promise<Account>
   return data.account;
 }
 
+/**
+ * The avatars this account may choose, and which of the two paid ways in it
+ * has.
+ *
+ * Served rather than built from a local list so the picker and the validation
+ * cannot drift: the same catalogue that refuses a save is the one offered.
+ * The two booleans are for deciding what to *show* — every one of them is
+ * checked again when saving.
+ */
+export type AvatarOptions = {
+  defaults: string[];
+  gallery: string[];
+  canUseGallery: boolean;
+  canUpload: boolean;
+};
+
+export async function fetchAvatarOptions(): Promise<AvatarOptions> {
+  const token = getAccountToken();
+  const res = await fetch(`${getSignalingHttpBase()}/account/avatars`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res, "Falha ao carregar os avatares."));
+  return (await res.json()) as AvatarOptions;
+}

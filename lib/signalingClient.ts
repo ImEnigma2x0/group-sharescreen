@@ -124,6 +124,11 @@ export type PeerInfo = {
   // (a guest, an account with nothing equipped, or a peer sent by an older
   // server version that doesn't include this yet).
   nameColor?: string | null;
+  // The person's profile picture, already checked against their plan by the
+  // server (see the API's toPublicAccount) — null for a guest, for somebody
+  // who never picked one, or for a Pro avatar whose subscription has lapsed.
+  // Undefined from a server that predates it, read the same as null.
+  avatarUrl?: string | null;
   // On the GoLive desktop app rather than a browser (see
   // server/signaling.ts's peerSummary) — ParticipantRow shows a small app
   // icon for these. Undefined for a peer sent by an older server version
@@ -258,6 +263,9 @@ export type ChatMessage = {
   flags?: string[];
   // See PeerInfo.nameColor's doc comment.
   nameColor?: string | null;
+  // See PeerInfo.avatarUrl — captured per-message at send time, same as
+  // `name`, so history keeps showing the picture the sender had then.
+  avatarUrl?: string | null;
   // "gif" is a link into Giphy's catalogue, "image" a file somebody uploaded
   // (see lib/chatImage.ts — it goes through the API, never straight to the
   // CDN); both carry the picture in `url`. Missing/anything else (including
@@ -1330,10 +1338,17 @@ class SignalingClient {
         // peers already in the room their badge/color just changed.
         const renameFlags = Array.isArray(msg.flags) ? (msg.flags as string[]) : undefined;
         const renameNameColor = typeof msg.nameColor === "string" ? msg.nameColor : null;
+        const renameAvatarUrl = typeof msg.avatarUrl === "string" ? msg.avatarUrl : null;
         this.setState({
           peers: this.state.peers.map((p) =>
             p.id === msg.id
-              ? { ...p, name: msg.name as string, flags: renameFlags, nameColor: renameNameColor }
+              ? {
+                  ...p,
+                  name: msg.name as string,
+                  flags: renameFlags,
+                  nameColor: renameNameColor,
+                  avatarUrl: renameAvatarUrl,
+                }
               : p
           ),
         });
@@ -1660,6 +1675,7 @@ class SignalingClient {
           isGuest: Boolean(msg.isGuest),
           flags: Array.isArray(msg.flags) ? (msg.flags as string[]) : undefined,
           nameColor: typeof msg.nameColor === "string" ? msg.nameColor : null,
+          avatarUrl: typeof msg.avatarUrl === "string" ? msg.avatarUrl : null,
           kind: msg.kind === "gif" ? "gif" : "text",
           text: (msg.text as string) ?? "",
           url: typeof msg.url === "string" ? msg.url : undefined,

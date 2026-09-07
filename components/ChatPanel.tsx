@@ -26,6 +26,7 @@ import {
   prepareChatImage,
 } from "@/lib/chatImage";
 import { DisplayUserName } from "@/components/DisplayUserName";
+import { UserAvatar } from "@/components/UserAvatar";
 import { withDeviceSuffix } from "@/lib/displayName";
 import { Popover, Tooltip } from "@/components/Tooltip";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -58,6 +59,7 @@ export type ChatPeer = {
   isGuest?: boolean;
   flags?: string[];
   nameColor?: string | null;
+  avatarUrl?: string | null;
   role?: string;
   isBroadcast?: boolean;
   description?: string;
@@ -961,6 +963,17 @@ export function ChatPanel({
                   {!grouped && (
                     <div className="flex items-center justify-between gap-1.5">
                       <div className="flex min-w-0 items-baseline gap-1.5">
+                        {/* Beside the name rather than in a left gutter:
+                            consecutive messages from one person are grouped
+                            and drop this header entirely (see `grouped`), so a
+                            gutter would be empty for most rows and the text
+                            would be indented past nothing. */}
+                        <UserAvatar
+                          src={m.avatarUrl}
+                          name={m.name}
+                          size={20}
+                          className="self-center"
+                        />
                         {/* Clickable only for a real account: a guest has no
                             profile to open, and `userId` is absent on messages
                             from before it was sent at all. Both keep the plain

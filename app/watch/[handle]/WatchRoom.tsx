@@ -4322,6 +4322,7 @@ export function WatchRoom({ handle }: { handle: string }) {
         isSelf
         isGuest={!state.account}
         userId={account?.id}
+        avatarUrl={account?.avatarUrl}
         // Your own row too. It was left out on the reasoning that this row has
         // "nobody else's profile to open", which missed that it opens *yours*
         // — and it was the one name in the list still leaving the room for a
@@ -4350,6 +4351,7 @@ export function WatchRoom({ handle }: { handle: string }) {
             onOpenProfile={setProfileUserId}
             isGuest={p.isGuest}
             userId={p.userId}
+            avatarUrl={p.avatarUrl}
             micsMuted={p.micsMuted}
             // Only where there is something to offer: for anyone else the
             // browser's own context menu is more use than an empty one. Which

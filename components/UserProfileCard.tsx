@@ -10,7 +10,7 @@ import { SocialActions } from "@/components/SocialActions";
 import { useAuth } from "@/lib/AuthContext";
 import { useSignaling } from "@/lib/useSignaling";
 import { signalingClient } from "@/lib/signalingClient";
-import { getAccountToken } from "@/lib/accountApi";
+import { getAccountToken, fetchAvatarOptions, type AvatarOptions } from "@/lib/accountApi";
 import { fetchCosmeticsCatalog, type CosmeticProduct } from "@/lib/cosmetics";
 import { prepareAvatarImage, AVATAR_IMAGE_ACCEPT, AVATAR_IMAGE_MAX_BYTES } from "@/lib/avatarImage";
 import { MdEdit, MdPhotoCamera, MdDeleteOutline } from "react-icons/md";
@@ -62,6 +62,55 @@ function StatCard({
  * page has nowhere to go and leaves it out; the dialog uses it to close
  * itself, so a click does not leave a modal hanging over the destination.
  */
+/** One row of pickable avatars, or the same row shown as a locked preview. */
+function AvatarRow({
+  label,
+  paths,
+  selected,
+  onPick,
+  locked = false,
+  lockedHint,
+}: {
+  label: string;
+  paths: string[];
+  selected: string | null;
+  onPick: (path: string) => void;
+  locked?: boolean;
+  lockedHint?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+        {label}
+        {locked && lockedHint ? ` · ${lockedHint}` : ""}
+      </span>
+      <div className="flex flex-wrap gap-2">
+        {paths.map((path) => (
+          <button
+            key={path}
+            type="button"
+            disabled={locked}
+            onClick={() => onPick(path)}
+            aria-label={label}
+            aria-pressed={selected === path}
+            className={`h-11 w-11 overflow-hidden rounded-full border-2 transition ${
+              selected === path
+                ? "border-emerald-500"
+                : "border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
+            } ${locked ? "cursor-not-allowed opacity-40" : "cursor-pointer"}`}
+          >
+            {/* Plain <img>: these are static files under public/, and one that
+                is not there yet simply draws nothing rather than breaking the
+                row around it. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={path} alt="" className="h-full w-full object-cover" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function UserProfileCard({
   id,
   onNavigate,
@@ -181,6 +230,7 @@ function ProfileContent({
   const [previewAvatar, setPreviewAvatar] = useState<string | null>(account.avatarUrl ?? null);
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null | undefined>(undefined);
   const [ownedBgColors, setOwnedBgColors] = useState<CosmeticProduct[]>([]);
+  const [avatarOptions, setAvatarOptions] = useState<AvatarOptions | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -214,6 +264,32 @@ function ProfileContent({
       cancelled = true;
     };
   }, [isEditing, isOwner, authAccount?.ownedCosmetics]);
+
+  // The catalogue, loaded only once the picker is on screen — it is a list of
+  // filenames that never changes mid-session, and fetching it on mount would
+  // put a request behind every profile view for a control most of them never
+  // open.
+  useEffect(() => {
+    if (!isEditing || !isOwner) return;
+    let cancelled = false;
+    fetchAvatarOptions()
+      .then((options) => {
+        if (!cancelled) setAvatarOptions(options);
+      })
+      .catch(() => {
+        // The upload button and the current picture still work without it.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isEditing, isOwner]);
+
+  /** A preset: stored as its own path, so no upload is involved. */
+  function handlePickPreset(path: string) {
+    setError(null);
+    setPreviewAvatar(path);
+    setAvatarDataUrl(path);
+  }
 
   async function handleAvatarPicked(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -384,6 +460,53 @@ function ProfileContent({
                 </button>
               )}
             </div>
+
+            {/* Avatar picker. Locked rows are drawn rather than hidden: a
+                perk nobody can see is a perk nobody buys, and the lock is
+                what says which plan carries it. Selecting one is still
+                refused by the API — this only decides what to offer. */}
+            {avatarOptions && (
+              <div className="flex flex-col gap-3">
+                <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Foto de perfil
+                </span>
+
+                <AvatarRow
+                  label="Padrão"
+                  paths={avatarOptions.defaults}
+                  selected={previewAvatar}
+                  onPick={handlePickPreset}
+                />
+
+                {avatarOptions.gallery.length > 0 && (
+                  <AvatarRow
+                    label="Avatares Pro"
+                    paths={avatarOptions.gallery}
+                    selected={previewAvatar}
+                    onPick={handlePickPreset}
+                    locked={!avatarOptions.canUseGallery}
+                    lockedHint="Disponível no Pro"
+                  />
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!avatarOptions.canUpload}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  >
+                    <MdPhotoCamera className="h-3.5 w-3.5" />
+                    Enviar minha imagem
+                  </button>
+                  {!avatarOptions.canUpload && (
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      Exclusivo do Pro Max.
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Display Name */}
             <div className="flex flex-col gap-1.5">

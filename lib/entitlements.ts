@@ -28,9 +28,11 @@ export type Feature =
   | "fps_120"
   | "bitrate_maximo"
   | "verified_badge"
-  | "no_ads";
+  | "no_ads"
+  | "avatar_gallery"
+  | "avatar_upload";
 
-export type FeatureTier = "free" | "account" | "premium";
+export type FeatureTier = "free" | "account" | "premium" | "premium_max";
 
 /** Which tier each gated option belongs to. Display only — see the header. */
 export const FEATURE_TIERS: Record<Feature, FeatureTier> = {
@@ -40,6 +42,8 @@ export const FEATURE_TIERS: Record<Feature, FeatureTier> = {
   fps_120: "premium",
   verified_badge: "premium",
   no_ads: "premium",
+  avatar_gallery: "premium",
+  avatar_upload: "premium_max",
 };
 
 /**

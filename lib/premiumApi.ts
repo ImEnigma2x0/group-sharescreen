@@ -85,14 +85,22 @@ export type StartCheckoutResult =
  * plan. Both are read from the database by the API and the buyer is read
  * from the token, so there is no parameter here that could change what
  * somebody is charged — which is why a modified client cannot buy premium
- * for a cent.
+ * for a cent. *
+ * `planId` names which plan to buy and defaults to the one the site has always
+ * sold, so every existing caller is unchanged. It is only a *selector*: the
+ * price still comes from the plan document on the server, and an id the server
+ * does not recognise falls back to that same default rather than buying
+ * something cheaper (see the API's requestedPlanId).
  */
-export async function startPremiumCheckout(email?: string): Promise<StartCheckoutResult> {
+export async function startPremiumCheckout(
+  email?: string,
+  planId?: string
+): Promise<StartCheckoutResult> {
   try {
     const res = await fetch(`${getSignalingHttpBase()}/premium/subscribe`, {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify(email ? { email } : {}),
+      body: JSON.stringify({ ...(email ? { email } : {}), ...(planId ? { planId } : {}) }),
     });
     const data = (await res.json().catch(() => ({}))) as {
       checkoutUrl?: string;
@@ -135,14 +143,22 @@ export type StartPixResult =
  * Unlike the card path this buys a *fixed stretch of time* rather than
  * starting a recurring charge — Pix has no standing mandate, so there is
  * nothing to renew and nothing to cancel. Nothing is granted until Mercado
- * Pago confirms the money arrived; the QR is an invitation to pay.
+ * Pago confirms the money arrived; the QR is an invitation to pay. *
+ * `planId` names which plan to buy and defaults to the one the site has always
+ * sold, so every existing caller is unchanged. It is only a *selector*: the
+ * price still comes from the plan document on the server, and an id the server
+ * does not recognise falls back to that same default rather than buying
+ * something cheaper (see the API's requestedPlanId).
  */
-export async function startPixPayment(email?: string): Promise<StartPixResult> {
+export async function startPixPayment(
+  email?: string,
+  planId?: string
+): Promise<StartPixResult> {
   try {
     const res = await fetch(`${getSignalingHttpBase()}/premium/pix`, {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify(email ? { email } : {}),
+      body: JSON.stringify({ ...(email ? { email } : {}), ...(planId ? { planId } : {}) }),
     });
     const data = (await res.json().catch(() => ({}))) as Partial<PixCharge> & {
       error?: string;
