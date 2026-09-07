@@ -17,10 +17,8 @@ import {
   ROOM_CODE_LENGTH,
   MAX_PRIVATE_ROOM_NAME_LENGTH,
   roomHandleFromInput,
+  HANDLE_RE,
 } from "./roomsApi";
-
-// Mirrors the server's HANDLE_RE — the whole point of the length cap below.
-const HANDLE_RE = /^[a-zA-Z0-9_-]{1,32}$/;
 
 // Round trip: whatever we build, we can read back.
 for (const name of ["familia", "a", "reuniao-time", "x_y-z", "A1"]) {
