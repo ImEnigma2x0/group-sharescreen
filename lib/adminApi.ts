@@ -644,6 +644,8 @@ export interface AdminAccountHit {
   id: string;
   username: string;
   displayName: string;
+  /** The flags actually stored — never the projection, which adds PRO. */
+  flags: string[];
   premium: { method?: string; currentPeriodEnd: number; status: string } | null;
 }
 
@@ -654,11 +656,32 @@ export interface AdminPlanOption {
   active: boolean;
 }
 
-export async function searchAdminAccounts(query: string): Promise<AdminAccountHit[]> {
-  const data = await adminFetch<{ accounts: AdminAccountHit[] }>(
-    `/admin/premium/accounts?q=${encodeURIComponent(query)}`
+/**
+ * One account search for the whole admin area, so "find the person" behaves
+ * the same wherever it is asked.
+ *
+ * `canEditAdminFlags` is what to *offer*: the server enforces the ADMIN /
+ * ADMIN_MASTER rules again on every write, whatever this page draws.
+ */
+export async function searchAdminAccounts(
+  query: string
+): Promise<{ accounts: AdminAccountHit[]; canEditAdminFlags: boolean }> {
+  return adminFetch<{ accounts: AdminAccountHit[]; canEditAdminFlags: boolean }>(
+    `/admin/accounts?q=${encodeURIComponent(query)}`
   );
-  return data.accounts;
+}
+
+/** Replaces an account's flags with exactly this list. */
+export async function setAccountFlags(userId: string, flags: string[]): Promise<string[]> {
+  const data = await adminFetch<{ account: { flags: string[] } }>(
+    `/admin/accounts/${encodeURIComponent(userId)}/flags`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ flags }),
+    }
+  );
+  return data.account.flags;
 }
 
 export async function fetchAdminPlans(): Promise<AdminPlanOption[]> {

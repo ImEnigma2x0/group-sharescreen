@@ -76,7 +76,7 @@ export function GrantPremiumPanel() {
     let cancelled = false;
     const timer = setTimeout(() => {
       searchAdminAccounts(query)
-        .then((found) => {
+        .then(({ accounts: found }) => {
           if (cancelled) return;
           // "Is this access live" is decided here, once, rather than in the
           // render — a clock read while rendering is a value React cannot
