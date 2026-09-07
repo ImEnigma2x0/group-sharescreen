@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { getAccountToken } from "./accountApi";
 import { getSignalingHttpBase } from "./roomsApi";
 import { getCaptchaToken } from "./turnstile";
 import type {
@@ -242,25 +243,27 @@ export async function clearAnnouncement(): Promise<void> {
 // as a signal to drop the stored token (mirrors fetchAdminRooms above), and
 // throws with the server's own error message when one is provided.
 async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getAdminToken();
+  // The account's own session, not a second one.
+  //
+  // This used to keep an administrator token in its own localStorage slot,
+  // minted by a login form of its own. That was a second way to be signed in
+  // to the same site: two tokens, two expiries, and a panel that could be
+  // "logged in" while the header said nobody was. There is one session now,
+  // and being an administrator is a flag on the account behind it (see the
+  // API's requireAdmin) rather than a separate credential.
+  const token = getAccountToken();
   if (!token) throw new Error("unauthorized");
   const res = await fetch(`${getSignalingHttpBase()}${path}`, {
     ...init,
     headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
   });
-  if (res.status === 401) {
-    setAdminToken(null);
-    throw new Error("unauthorized");
-  }
+  if (res.status === 401) throw new Error("unauthorized");
   if (res.status === 204) return undefined as T;
   if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    throw new Error(
-      (data && typeof data === "object" && "error" in data && String(data.error)) ||
-        `Falha na requisição (status ${res.status})`
-    );
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error ?? `Erro ${res.status}`);
   }
-  return res.json() as Promise<T>;
+  return (await res.json()) as T;
 }
 
 export type AdminStats = {
@@ -673,4 +676,34 @@ export async function grantPremium(userId: string, planId: string, days: number)
 
 export async function revokePremiumGrant(userId: string): Promise<void> {
   await adminFetch(`/admin/premium/grant/${encodeURIComponent(userId)}`, { method: "DELETE" });
+}
+
+// ─── Registro de ações ────────────────────────────────────────────────────
+
+export interface AdminLogEntry {
+  id: string;
+  adminId: string;
+  adminUsername: string;
+  method: string;
+  path: string;
+  status: number;
+  details: string;
+  ip: string;
+  ts: number;
+}
+
+/**
+ * The administrators' record. `canDelete` says whether to draw the delete
+ * control — the server enforces it regardless (only ADMIN_MASTER), so this is
+ * what to *show*, never what is allowed.
+ */
+export async function fetchAdminLog(
+  before?: number
+): Promise<{ entries: AdminLogEntry[]; canDelete: boolean }> {
+  const query = before ? `?before=${before}` : "";
+  return adminFetch<{ entries: AdminLogEntry[]; canDelete: boolean }>(`/admin/logs${query}`);
+}
+
+export async function deleteAdminLogEntry(id: string): Promise<void> {
+  await adminFetch(`/admin/logs/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
