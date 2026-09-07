@@ -255,6 +255,34 @@ export function tierForRenderedSize(
  * each axis to what the dials actually say and then taking the best tier that
  * fits under both is the only reading where the dials mean what they read.
  */
+/**
+ * The best tier whose average cost the bitrate dial can actually pay for.
+ *
+ * The resolution and fps dials already cap the tier ladder, but the bitrate
+ * dial did not — it only clipped `maxBitrate` afterwards, letting a sender be
+ * configured for a picture its bit budget cannot sustain. Under the default
+ * "text" profile that combination does not come out as a softer image: it is
+ * `maintain-resolution`, so the encoder holds the picture and pays the
+ * shortfall in *discarded frames* (see DEGRADATION_PREFERENCE and MIN_KBPS).
+ *
+ * The case that made this visible: a viewer pressing F11. Their tile grows to
+ * the whole screen, so tierForRenderedSize asks for the top tier, and on a
+ * 60fps share that took one viewer from 576p30 (~18 Mpx/s at 1500 kbps) to
+ * 1080p60 (~124 Mpx/s at 4000 kbps) — seven times the pixels for under three
+ * times the bits. The stream did not soften, it froze, for that one person.
+ *
+ * Compared against `baseKbps`, the tier's average cost, not against the
+ * ceiling encoderCeilingKbps hands out: that one deliberately carries 1.5x
+ * headroom for busy moments, and measuring against it would call a budget
+ * sufficient at bitrates where the average frame is already starved.
+ */
+export function affordableTier(dialCeilingKbps: number): QualityTier {
+  if (!Number.isFinite(dialCeilingKbps) || dialCeilingKbps <= 0) return BEST_TIER;
+  // TIERS is ordered best-first, so the first that fits is the best that fits.
+  const fit = TIERS.find((t) => t.baseKbps <= dialCeilingKbps);
+  return (fit ?? TIERS[TIERS.length - 1]).tier;
+}
+
 export function capTier(requested: QualityTier, ceiling: QualityTier): QualityTier {
   const want = tierSpec(requested);
   const cap = tierSpec(ceiling);

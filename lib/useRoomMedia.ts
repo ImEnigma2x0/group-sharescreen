@@ -37,6 +37,7 @@ import {
 } from "./mediaPreferences";
 import {
   BEST_TIER,
+  affordableTier,
   capTier,
   tierForRenderedSize,
   type QualityTier,
@@ -2168,11 +2169,31 @@ export function useRoomMedia(room: string) {
       height: dims.height,
       frameRate: shareFps,
       maxBitrateKbps: BITRATE_CEILING_KBPS[shareBitrate],
-      ceilingTier: ceilingTierFor(shareResolution, shareFps),
+      // Capped by all three dials, not just two. Resolution and fps shape
+      // the ladder; the bitrate dial says which rungs are actually payable.
+      // Without this last cap a viewer going fullscreen could pull the sender
+      // up to a tier the budget cannot feed, which under "text"
+      // (maintain-resolution) surfaces as a frozen picture rather than a soft
+      // one — see affordableTier.
+      ceilingTier: capTier(
+        ceilingTierFor(shareResolution, shareFps),
+        affordableTier(BITRATE_CEILING_KBPS[shareBitrate])
+      ),
       degradation: shareProfile,
       honorViewerRequests: smartQualityEnabled,
     };
   }, [shareResolution, shareFps, shareBitrate, smartQualityEnabled, shareProfile]);
+
+  // Whether the bitrate dial is the thing holding the picture back — i.e. the
+  // resolution/fps the broadcaster picked cost more than their budget can
+  // feed, so affordableTier lowered the ceiling below what they asked for.
+  // Surfaced because that cap is otherwise invisible: someone who chose 60fps
+  // would be served 30 with no explanation, which is precisely the kind of
+  // silent downgrade that produces the next bug report.
+  const bitrateLimitsPicture = useMemo(
+    () => screenQualityPreset.ceilingTier !== ceilingTierFor(shareResolution, shareFps),
+    [screenQualityPreset.ceilingTier, shareResolution, shareFps]
+  );
 
   // The camera runs the screen's resolution/fps/bitrate dials — those are what
   // the picker offers — but never its content profile. A camera is motion, and
@@ -2869,6 +2890,7 @@ export function useRoomMedia(room: string) {
     shareFps,
     setShareFps,
     shareBitrate,
+    bitrateLimitsPicture,
     setShareBitrate,
     smartQualityEnabled,
     setSmartQualityEnabled,

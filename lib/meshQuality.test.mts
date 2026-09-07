@@ -7,6 +7,7 @@
 
 import assert from "node:assert/strict";
 import {
+  affordableTier,
   capTier,
   congestedBitrateKbps,
   encodeMpxs,
@@ -332,5 +333,43 @@ assert.equal(congestedBitrateKbps(5600, 0.02), 500, "congestionamento pesado par
 // costs less than the floor is never pushed above its own budget.
 assert.equal(congestedBitrateKbps(150, 0.1), 150, "tier barato nunca sobe por causa do piso");
 assert.equal(congestedBitrateKbps(150, 1), 150);
+
+// --- the bitrate dial as a tier ceiling -----------------------------------
+//
+// Regression cover for the fullscreen freeze: a viewer pressing F11 grows
+// their tile to the whole screen, so tierForRenderedSize asks for the top of
+// the ladder. Nothing used to stop that request from landing on a sender
+// whose bit budget could not feed it, and under the default "text" profile
+// (maintain-resolution) the shortfall came out as dropped frames — the share
+// froze for that one person while the connection stayed healthy.
+
+// The factory default dial. 1080p60 costs 5000 and 1440p30 costs 4500, so the
+// best tier 4000 kbps can carry on average is 1080p30.
+assert.equal(affordableTier(4000), "1080p30");
+assert.equal(affordableTier(8000), "1080p60");
+assert.equal(affordableTier(16000), "1440p60");
+// Below the cheapest tier there is still a floor to serve.
+assert.equal(affordableTier(100), "576p15");
+// No dial reading is not a reason to throttle anybody.
+assert.equal(affordableTier(0), TIERS[0].tier);
+assert.equal(affordableTier(Number.NaN), TIERS[0].tier);
+
+// The cap must never lower a share the dial can already pay for: it exists to
+// stop an unpayable upgrade, not to make the common case worse.
+assert.equal(capTier("1080p30", affordableTier(4000)), "1080p30", "o padrão de fábrica passa intacto");
+assert.equal(capTier("1080p60", affordableTier(8000)), "1080p60", "60fps financiado mantém os quadros");
+
+// 1080p at 60fps chosen, bitrate left at the 4000 default: what a viewer at
+// fullscreen asks for, and what they must actually be served.
+{
+  const ceiling = capTier("1080p60", affordableTier(4000));
+  const requested = tierForRenderedSize(1920, 1080, 1, undefined);
+  assert.equal(requested, "1080p60");
+  // Served at 30fps rather than 60 — full-size picture with real frames,
+  // instead of an encoder told to hold 1080p60 on half the budget it needs
+  // and paying the difference in freezes.
+  assert.equal(capTier(requested, ceiling), "1080p30");
+  assert.ok(tierSpec(capTier(requested, ceiling)).baseKbps <= 4000);
+}
 
 console.log("meshQuality: ok");

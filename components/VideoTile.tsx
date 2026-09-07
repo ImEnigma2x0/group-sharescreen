@@ -224,6 +224,37 @@ export function VideoTile({
     if (videoRef.current) videoRef.current.srcObject = stream;
   }, [stream]);
 
+  // A live tile has no legitimate paused state, so any pause is a fault to
+  // undo rather than an intent to respect. The HTML spec pauses a media
+  // element when it is removed from the document, which a re-parenting render
+  // does routinely, and a paused element keeps painting its last frame — so
+  // the failure looks exactly like a frozen share while the connection
+  // underneath is still healthy and delivering.
+  //
+  // The room's own play/pause control (onTogglePlay) is not affected: it acts
+  // on the *source* element being played into the room, which reaches viewers
+  // as a stream that stops producing frames. A stalled MediaStream never
+  // fires "pause" on the receiving element, so nothing here fights it.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    function onPause() {
+      const el = videoRef.current;
+      // Only while there is something live to resume: a track that genuinely
+      // ended must be left alone, or this retries forever against a stream
+      // that is never coming back.
+      const live = (el?.srcObject as MediaStream | null)
+        ?.getTracks()
+        .some((track) => track.readyState === "live");
+      if (!el || !live) return;
+      // Rejects under the autoplay policy, and there is nothing useful to do
+      // about that here — the click that grants permission will resume it.
+      void el.play().catch(() => undefined);
+    }
+    video.addEventListener("pause", onPause);
+    return () => video.removeEventListener("pause", onPause);
+  }, []);
+
   useGainedAudio(videoRef, stream, volume ?? internalVolume, isMuted);
 
   useEffect(() => {
