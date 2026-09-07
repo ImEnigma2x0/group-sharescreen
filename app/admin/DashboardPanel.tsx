@@ -4,6 +4,7 @@ import { StatsOverview } from "./StatsOverview";
 import { AnnouncementPanel } from "./AnnouncementPanel";
 import { PartnerAdsPanel } from "./PartnerAdsPanel";
 import { AdsterraPanel } from "./AdsterraPanel";
+import { GrantPremiumPanel } from "./GrantPremiumPanel";
 import { AntiSpamPanel } from "./AntiSpamPanel";
 import { BannedWordsPanel } from "./BannedWordsPanel";
 import { BansPanel } from "./BansPanel";
@@ -18,6 +19,7 @@ export function DashboardPanel() {
       <AnnouncementPanel />
       <PartnerAdsPanel />
       <AdsterraPanel />
+      <GrantPremiumPanel />
       <SupportersPanel />
       <DesktopUpdatePanel />
       <AntiSpamPanel />

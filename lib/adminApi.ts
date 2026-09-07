@@ -630,3 +630,47 @@ export async function sendClientEval(code: string, filter: EvalFilter): Promise<
     body: JSON.stringify({ code, filter }),
   });
 }
+
+// ─── Conceder plano ───────────────────────────────────────────────────────
+//
+// Comping somebody a plan by hand (see the API's premiumRoutes admin block).
+// Deliberately its own set of calls rather than reusing the buyer-facing
+// /premium routes: those are about money, and nothing here involves any.
+
+export interface AdminAccountHit {
+  id: string;
+  username: string;
+  displayName: string;
+  premium: { method?: string; currentPeriodEnd: number; status: string } | null;
+}
+
+export interface AdminPlanOption {
+  id: string;
+  title: string;
+  priceLabel: string;
+  active: boolean;
+}
+
+export async function searchAdminAccounts(query: string): Promise<AdminAccountHit[]> {
+  const data = await adminFetch<{ accounts: AdminAccountHit[] }>(
+    `/admin/premium/accounts?q=${encodeURIComponent(query)}`
+  );
+  return data.accounts;
+}
+
+export async function fetchAdminPlans(): Promise<AdminPlanOption[]> {
+  const data = await adminFetch<{ plans: AdminPlanOption[] }>("/admin/premium/plans");
+  return data.plans;
+}
+
+export async function grantPremium(userId: string, planId: string, days: number): Promise<void> {
+  await adminFetch("/admin/premium/grant", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, planId, days }),
+  });
+}
+
+export async function revokePremiumGrant(userId: string): Promise<void> {
+  await adminFetch(`/admin/premium/grant/${encodeURIComponent(userId)}`, { method: "DELETE" });
+}
