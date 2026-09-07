@@ -303,10 +303,10 @@ export function getUserBadges(
   const activeCatalog = catalog && catalog.length > 0 ? catalog : DEFAULT_BADGES;
 
   // Testing override: user @sasdasd receives all badges
-  const normalizedUsername = account.username?.replace(/^@/, "").trim().toLowerCase();
-  if (normalizedUsername === "sasdasd") {
-    return activeCatalog;
-  }
+  // const normalizedUsername = account.username?.replace(/^@/, "").trim().toLowerCase();
+  // if (normalizedUsername === "sasdasd") {
+  //   return activeCatalog;
+  // }feat: Badge
 
   return activeCatalog.filter((badge) => userHasBadge(badge, account, isOwner));
 }
