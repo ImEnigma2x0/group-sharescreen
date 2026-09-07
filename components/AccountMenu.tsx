@@ -43,7 +43,7 @@ const secondaryButtonClass =
 
 export function AccountMenu() {
   const state = useSignaling();
-  const { logout } = useAuth();
+  const { account: authAccount, logout } = useAuth();
 
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<PanelMode>("menu");
@@ -55,8 +55,7 @@ export function AccountMenu() {
   >(null);
 
   const name = state.name;
-  const account = state.account;
-  const isAccount = Boolean(account);
+  const isAccount = Boolean(authAccount || state.account);
   const previousNameRef = useRef(name);
 
   // Closes the rename form once the name actually changes (success, or a
@@ -178,6 +177,11 @@ export function AccountMenu() {
                     the site header's nav: the header is where the *site's*
                     pages live, and a friends list is only ever about the
                     person already signed in. */}
+                {authAccount?.id && (
+                  <Link href={`/user/${authAccount.id}`} onClick={close} className={itemClass}>
+                    Meu perfil
+                  </Link>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -191,7 +195,7 @@ export function AccountMenu() {
                 <Link href="/amigos" onClick={close} className={itemClass}>
                   Amigos
                 </Link>
-                {state.account?.flags?.includes("ADMIN") && (
+                {(authAccount?.flags?.includes("ADMIN") || state.account?.flags?.includes("ADMIN")) && (
                   <Link href="/admin" onClick={close} className={`${itemClass} font-semibold text-purple-600 dark:text-purple-400`}>
                     Painel de Admin
                   </Link>
@@ -240,18 +244,26 @@ export function AccountMenu() {
         aria-expanded={open}
         className="ml-1 flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-300 py-1 pr-1.5 pl-1 text-sm font-medium text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:bg-zinc-900"
       >
-        <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold text-white ${
-            // An account and a guest name are genuinely different things —
-            // one survives this browser, the other does not — so the avatar
-            // says which without spending a word on it.
-            isAccount
-              ? "bg-gradient-to-br from-emerald-500 to-teal-600"
-              : "bg-gradient-to-br from-zinc-400 to-zinc-500"
-          }`}
-        >
-          {initial}
-        </span>
+        {authAccount?.avatarUrl ? (
+          <img
+            src={authAccount.avatarUrl}
+            alt={name}
+            className="h-6 w-6 shrink-0 rounded-md object-cover"
+          />
+        ) : (
+          <span
+            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold text-white ${
+              // An account and a guest name are genuinely different things —
+              // one survives this browser, the other does not — so the avatar
+              // says which without spending a word on it.
+              isAccount
+                ? "bg-gradient-to-br from-emerald-500 to-teal-600"
+                : "bg-gradient-to-br from-zinc-400 to-zinc-500"
+            }`}
+          >
+            {initial}
+          </span>
+        )}
         <span className="hidden max-w-[12ch] truncate sm:inline">{name}</span>
         <MdExpandMore className="h-4 w-4 shrink-0 text-zinc-400" />
       </button>

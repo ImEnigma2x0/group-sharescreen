@@ -61,7 +61,13 @@ export function RoomAccountCard({
   const initial = state.name.trim().slice(0, 1).toUpperCase();
   const verified = hasVerifiedBadge(state.account?.flags);
 
-  const avatar = (
+  const avatar = account?.avatarUrl ? (
+    <img
+      src={account.avatarUrl}
+      alt={state.name}
+      className="h-10 w-10 shrink-0 rounded-xl object-cover [@media(max-height:52rem)]:h-8 [@media(max-height:52rem)]:w-8 [@media(max-height:52rem)]:rounded-lg"
+    />
+  ) : (
     <span
       className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base font-semibold text-white [@media(max-height:52rem)]:h-8 [@media(max-height:52rem)]:w-8 [@media(max-height:52rem)]:rounded-lg [@media(max-height:52rem)]:text-sm ${
         // The same two gradients components/AccountMenu.tsx uses for the same

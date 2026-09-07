@@ -143,6 +143,8 @@ export async function prepareChatImage(file: File): Promise<PreparedChatImage> {
 
   return { dataUrl: original, byteLength: originalBytes, mimeType: file.type };
 }
+// Re-exported for backward compatibility; prefer importing from lib/avatarImage directly.
+export { prepareAvatarImage, type PreparedAvatarImage } from "./avatarImage";
 
 export type SendChatImagesResult = { ok: true; urls: string[] } | { ok: false; error: string };
 

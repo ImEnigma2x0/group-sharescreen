@@ -23,9 +23,11 @@ export type Account = {
   // as an empty inventory / nothing equipped.
   ownedCosmetics?: string[];
   equippedNameColor?: string | null;
+  equippedProfileColor?: string | null;
   // Public profile page content (see app/user/[id]/page.tsx and lib/
   // userProfile.ts) — DB-edited only, unlike points above.
   bio?: string | null;
+  avatarUrl?: string | null;
   bannerUrl?: string | null;
   // Cumulative seconds, tracked automatically by the signaling server —
   // never hand-edited. Absent on an older API response, same "reads as 0"
@@ -324,3 +326,29 @@ export async function unlinkOAuthProvider(provider: string): Promise<void> {
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res, "Falha ao desconectar."));
 }
+
+export type UpdateProfileInput = {
+  displayName?: string;
+  bio?: string | null;
+  avatar?: string | null;
+  equippedProfileColor?: string | null;
+};
+
+export async function updateProfile(input: UpdateProfileInput): Promise<Account> {
+  const token = getAccountToken();
+  if (!token) throw new Error("Você não está conectado.");
+
+  const res = await fetch(`${getSignalingHttpBase()}/account/profile`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) throw new Error(await parseErrorMessage(res, "Falha ao atualizar perfil."));
+  const data = (await res.json()) as { account: Account };
+  return data.account;
+}
+

@@ -7,7 +7,7 @@
 import { getAccountToken } from "./accountApi";
 import { getSignalingHttpBase } from "./roomsApi";
 
-export type CosmeticProductType = "name_color";
+export type CosmeticProductType = "name_color" | "profile_color";
 
 export type CosmeticProduct = {
   id: string;
@@ -21,6 +21,7 @@ export type CosmeticsCatalogResponse = {
   catalog: CosmeticProduct[];
   ownedCosmetics: string[];
   equippedNameColor: string | null;
+  equippedProfileColor?: string | null;
 };
 
 async function parseErrorMessage(res: Response, fallback: string): Promise<string> {
@@ -46,6 +47,7 @@ export type PurchaseCosmeticResult = {
   points: number;
   ownedCosmetics: string[];
   equippedNameColor: string | null;
+  equippedProfileColor?: string | null;
 };
 
 export async function purchaseCosmetic(productId: string): Promise<PurchaseCosmeticResult> {
@@ -59,17 +61,25 @@ export async function purchaseCosmetic(productId: string): Promise<PurchaseCosme
   return (await res.json()) as PurchaseCosmeticResult;
 }
 
-// Switches which owned name color is active — free, since buying already
+export type EquipCosmeticResult = {
+  equippedNameColor: string | null;
+  equippedProfileColor?: string | null;
+};
+
+// Switches which owned name color or profile color is active — free, since buying already
 // spent the points (see purchaseCosmetic above); this only changes which
-// owned one shows. `productId: null` un-equips.
-export async function equipCosmetic(productId: string | null): Promise<{ equippedNameColor: string | null }> {
+// owned one shows. `productId: null` un-equips according to targetType.
+export async function equipCosmetic(
+  productId: string | null,
+  targetType?: CosmeticProductType
+): Promise<EquipCosmeticResult> {
   const token = getAccountToken();
   if (!token) throw new Error("Crie uma conta para usar a loja.");
   const res = await fetch(`${getSignalingHttpBase()}/cosmetics/equip`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ productId }),
+    body: JSON.stringify({ productId, targetType }),
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res, "Falha ao equipar o item."));
-  return (await res.json()) as { equippedNameColor: string | null };
+  return (await res.json()) as EquipCosmeticResult;
 }
