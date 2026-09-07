@@ -962,18 +962,21 @@ export function ChatPanel({
                   )}
                   {!grouped && (
                     <div className="flex items-center justify-between gap-1.5">
-                      <div className="flex min-w-0 items-baseline gap-1.5">
+                      {/* Two levels on purpose. The avatar is a circle with no
+                          baseline, so it centres against the text block
+                          (items-center here); the name and the timestamp are
+                          both text at different sizes and still want their
+                          baselines aligned, which is what the inner span
+                          keeps. Putting all three under one items-baseline was
+                          what left the picture sitting low. */}
+                      <div className="flex min-w-0 items-center gap-1.5">
                         {/* Beside the name rather than in a left gutter:
                             consecutive messages from one person are grouped
                             and drop this header entirely (see `grouped`), so a
                             gutter would be empty for most rows and the text
                             would be indented past nothing. */}
-                        <UserAvatar
-                          src={m.avatarUrl}
-                          name={m.name}
-                          size={20}
-                          className="self-center"
-                        />
+                        <UserAvatar src={m.avatarUrl} name={m.name} size={20} />
+                        <span className="flex min-w-0 items-baseline gap-1.5">
                         {/* Clickable only for a real account: a guest has no
                             profile to open, and `userId` is absent on messages
                             from before it was sent at all. Both keep the plain
@@ -1006,8 +1009,9 @@ export function ChatPanel({
                             className={"min-w-0 font-medium text-zinc-700 dark:text-zinc-300"}
                           />
                         )}
-                        <span className="shrink-0 text-xs text-zinc-400 tabular-nums dark:text-zinc-600">
-                          {formatTime(m.ts)}
+                          <span className="shrink-0 text-xs text-zinc-400 tabular-nums dark:text-zinc-600">
+                            {formatTime(m.ts)}
+                          </span>
                         </span>
                       </div>
                       {onSend && (

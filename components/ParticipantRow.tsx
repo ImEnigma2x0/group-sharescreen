@@ -181,11 +181,13 @@ export function ParticipantRow({
         hasMenu ? "cursor-pointer transition hover:bg-zinc-200/70 dark:hover:bg-zinc-800" : ""
       }`}
     >
-      <span className="flex min-w-0 items-baseline gap-1">
-        {/* self-center rather than the row's baseline: a circle has no
-            baseline to sit on, and letting it inherit one drops it below the
-            name it belongs to. */}
-        <UserAvatar src={avatarUrl} name={name} size={22} className="self-center" />
+      {/* items-center, not items-baseline. Everything in this row is either a
+          circle or an icon, none of which has a baseline to sit on — under
+          baseline alignment they get placed against the name's, which reads as
+          the avatar sitting low. The name is the only text here, so there is
+          no baseline relationship left to preserve. */}
+      <span className="flex min-w-0 items-center gap-1">
+        <UserAvatar src={avatarUrl} name={name} size={22} />
         {canOpenProfile && onOpenProfile ? (
           // A button, not a styled link: this goes nowhere, and marking it up
           // as navigation would promise a middle-click and a "copy link
