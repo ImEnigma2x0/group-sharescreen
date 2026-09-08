@@ -24,7 +24,7 @@ import {
 import { DEFAULT_AVATAR_PATH } from "@/components/UserAvatar";
 import { fetchCosmeticsCatalog, type CosmeticProduct } from "@/lib/cosmetics";
 import { prepareAvatarImage, AVATAR_IMAGE_ACCEPT, AVATAR_IMAGE_MAX_BYTES } from "@/lib/avatarImage";
-import { MdEdit, MdPhotoCamera, MdDeleteOutline } from "react-icons/md";
+import { MdCheck, MdEdit, MdPhotoCamera, MdDeleteOutline } from "react-icons/md";
 import useNtPopups from "ntpopups";
 import { UserBadges } from "@/components/UserBadges";
 
@@ -39,16 +39,6 @@ import { UserBadges } from "@/components/UserBadges";
 
 const cardClass =
   "rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950";
-
-/**
- * One customisation group in the edit form.
- *
- * The form was a flat column of headings and controls with nothing drawing
- * them together, so it read as a pile rather than as sections. A border and
- * consistent padding is the whole fix.
- */
-const sectionClass =
-  "flex flex-col gap-3 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800";
 
 /**
  * The same group, in its plan's colour: blue for Pro, gold for Pro Max.
@@ -96,6 +86,70 @@ function planRowClass(locked: boolean, extra: string): string {
   return `${extra} ${locked ? "relative rounded-xl p-2.5" : ""}`;
 }
 
+/**
+ * A field edited where it is shown.
+ *
+ * The profile used to swap into a separate form: a column of labelled inputs
+ * that looked nothing like the page they produced, so the only way to see the
+ * result was to save and find out. Here each field keeps its place and its
+ * styling, and a pencil beside it opens an editor in that same spot — closing
+ * it leaves the card showing exactly what saving would produce, unsaved
+ * values included.
+ */
+function InlineEdit({
+  editable,
+  open,
+  onOpen,
+  onClose,
+  editor,
+  label,
+  children,
+}: {
+  /** Edit mode is on and this is the owner's own profile. */
+  editable: boolean;
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  /** Shown in place of `children` while open. */
+  editor: React.ReactNode;
+  /** For the pencil's accessible name — "Editar nome", "Editar bio". */
+  label: string;
+  children: React.ReactNode;
+}) {
+  if (!editable) return <>{children}</>;
+  if (open) {
+    return (
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">{editor}</div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={`Concluir ${label.toLowerCase()}`}
+          className="mt-1 shrink-0 cursor-pointer rounded-lg p-1 text-emerald-600 transition hover:bg-black/10 dark:text-emerald-400"
+        >
+          <MdCheck className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="group/inline flex items-start gap-1.5">
+      <div className="min-w-0 flex-1">{children}</div>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={label}
+        // Always rendered, dimmed until the row is hovered: a control that
+        // only exists on hover cannot be found by anybody who does not
+        // already know it is there.
+        className="mt-1 shrink-0 cursor-pointer rounded-lg p-1 opacity-40 transition hover:bg-black/10 group-hover/inline:opacity-100"
+      >
+        <MdEdit className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
 /** The link to put back in the field for a song already saved. */
 function songLinkOf(song: { videoId: string } | null | undefined): string {
   return song ? `https://www.youtube.com/watch?v=${song.videoId}` : "";
@@ -105,10 +159,15 @@ function PlanSection({
   tier,
   title,
   locked,
+  titleStyle,
+  neutralStyle,
   children,
 }: {
   tier: "pro" | "proMax";
   title: string;
+  /** The profile theme's colours, when one is active — see ProfileContent. */
+  titleStyle?: React.CSSProperties;
+  neutralStyle?: React.CSSProperties;
   /** Whether this account is missing the plan — decides the sales line. */
   locked?: boolean;
   children: React.ReactNode;
@@ -132,10 +191,13 @@ function PlanSection({
       className={`relative flex flex-col gap-3 rounded-xl p-3 ${
         locked ? "" : "border border-zinc-200 dark:border-zinc-800"
       }`}
+      style={locked ? undefined : neutralStyle}
     >
       <PlanRing tier={tier} locked={Boolean(locked)} />
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{title}</span>
+        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300" style={titleStyle}>
+          {title}
+        </span>
         {/* The sales line only for somebody who cannot use the section.
             A subscriber already has it — telling them where to buy it is
             noise in a form they are trying to fill in. */}
@@ -436,6 +498,9 @@ function ProfileContent({
   const [editTheme, setEditTheme] = useState<ProfileTheme | null>(account.profileTheme ?? null);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [editSong, setEditSong] = useState("");
+  // Which field is open for editing, or none. One at a time: two inputs open
+  // at once is a form again, which is the thing this replaced.
+  const [openField, setOpenField] = useState<"name" | "bio" | "song" | null>(null);
   const [bannerPickerOpen, setBannerPickerOpen] = useState(false);
   const [bannerDataUrl, setBannerDataUrl] = useState<string | null | undefined>(undefined);
   const [saving, setSaving] = useState(false);
@@ -605,6 +670,7 @@ function ProfileContent({
     setEditSong(songLinkOf(account.profileSong));
     setAvatarPickerOpen(false);
     setBannerPickerOpen(false);
+    setOpenField(null);
     setError(null);
   }
 
@@ -670,6 +736,22 @@ function ProfileContent({
   // disagrees with it somewhere.
   const theme = profileThemeStyle(isEditing ? editTheme : account.profileTheme);
 
+  // The edit form wears the same palette as the profile behind it, so what
+  // somebody is building is what they are looking at while they build it —
+  // a neutral light-mode form pasted on top of a dark gradient was the one
+  // place the preview stopped being a preview.
+  //
+  // Applied as inline styles over the existing classes rather than by
+  // rewriting each className: an inline colour wins over any Tailwind
+  // variant, so one object per role covers every element that plays that
+  // role, and none can be missed by editing a class string wrong.
+  const themedLabel = theme ? { color: theme.text } : undefined;
+  const themedHint = theme ? { color: theme.muted } : undefined;
+  const themedField = theme
+    ? { background: theme.surface, borderColor: theme.border, color: theme.text }
+    : undefined;
+  const themedDivider = theme ? { borderColor: theme.border } : undefined;
+
   return (
     <div
       className={`overflow-hidden rounded-2xl border transition-colors ${
@@ -696,9 +778,20 @@ function ProfileContent({
                 background: activeBgColor,
               }
             : theme
-              ? // Nothing of its own — the card's gradient shows through, so
-                // the top of the profile is one surface rather than two.
-                { background: "transparent" }
+              ? // A band of its own, in the theme's own colours.
+                //
+                // This was `transparent`, on the reasoning that the card's
+                // gradient should run unbroken from the top. What that
+                // actually did was delete the banner: the strip became a
+                // slice of the background behind it, so a profile with a
+                // gradient had no banner at all. The overlay and the hairline
+                // below give it back its edges without introducing a second
+                // palette — which is what the default green band would be on
+                // top of somebody's chosen colours.
+                {
+                  backgroundImage: `linear-gradient(${theme.surface}, ${theme.surface}), ${theme.background}`,
+                  borderBottom: `1px solid ${theme.border}`,
+                }
               : {
                   background: "linear-gradient(135deg, #18181b 0%, #10b981 140%)",
                 }
@@ -731,7 +824,7 @@ function ProfileContent({
                 className="absolute right-0 top-full z-40 mt-2 flex w-80 max-w-[calc(100vw-3rem)] flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-3 text-left shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
               >
               <div className="flex items-center justify-between gap-2">
-                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300" style={themedLabel}>
                   Alterar banner
                 </label>
                 <button
@@ -874,9 +967,24 @@ function ProfileContent({
                     <div className="flex flex-col gap-3">
         {/* No close button: the popover closes on a click outside and on
             Escape, and a second way out only takes room from the options. */}
-        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-          Foto de perfil
-        </span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Foto de perfil
+          </span>
+          {/* Lost when the old form went away — it lived in that form's
+              header. It belongs here anyway: this is where the picture is
+              chosen, so it is where clearing it belongs too. */}
+          {previewAvatar && (
+            <button
+              type="button"
+              onClick={handleRemoveAvatar}
+              className="flex items-center gap-1 text-xs font-medium text-red-600 transition hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+            >
+              <MdDeleteOutline className="h-4 w-4" />
+              Remover
+            </button>
+          )}
+        </div>
 
         {/* currentAvatar, not previewAvatar: somebody who never chose
             is *wearing* the first default everywhere else in the app,
@@ -928,7 +1036,7 @@ function ProfileContent({
         </div>
       </div>
                   ) : (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400" style={themedHint}>
                       {avatarOptionsError ?? "Carregando os avatares…"}
                     </p>
                   )}
@@ -964,54 +1072,199 @@ function ProfileContent({
       </div>
 
       <div className="px-5 pb-5 sm:px-6 sm:pb-6">
-        {isEditing ? (
-          <form onSubmit={handleSave} className="mt-4 flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-zinc-200 pb-3 dark:border-zinc-800">
-              <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">
-                Editar informações de usuário
-              </h2>
-              {previewAvatar && (
-                <button
-                  type="button"
-                  onClick={handleRemoveAvatar}
-                  className="flex items-center gap-1 text-xs font-medium text-red-600 transition hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+        {/* One view, always. Editing used to swap the whole card for a
+            column of labelled inputs that looked nothing like the profile it
+            produced — the only way to see the result was to save and find
+            out. Now the fields are edited where they sit (see InlineEdit),
+            and what is left down here is the part with nowhere else to live:
+            the background, which is the card itself, and the actions. */}
+            <div className="flex flex-wrap items-end justify-between gap-3 pt-3">
+              <div className="min-w-0">
+                <InlineEdit
+                  editable={isEditing}
+                  open={openField === "name"}
+                  onOpen={() => setOpenField("name")}
+                  onClose={() => setOpenField(null)}
+                  label="Editar nome"
+                  editor={
+                    <input
+                      autoFocus
+                      maxLength={24}
+                      value={editDisplayName}
+                      onChange={(e) => setEditDisplayName(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-2xl font-semibold text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                      style={themedField}
+                    />
+                  }
                 >
-                  <MdDeleteOutline className="h-4 w-4" />
-                  Remover foto
-                </button>
-              )}
+                  <h1
+                    className="flex items-center gap-1.5 truncate text-2xl font-semibold text-zinc-950 dark:text-zinc-50"
+                    style={theme ? { color: theme.text } : undefined}
+                  >
+                    {/* The pending value, not the saved one: closing an editor
+                        has to leave the card showing what saving would give. */}
+                    <span
+                      style={
+                        account.equippedNameColor ? { color: account.equippedNameColor } : undefined
+                      }
+                    >
+                      {isEditing ? editDisplayName : account.displayName}
+                    </span>
+                    <VerifiedBadge flags={account?.flags} className="h-6 w-6 shrink-0" />
+                  </h1>
+                </InlineEdit>
+                <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                  <p
+                    className="text-sm text-zinc-500 dark:text-zinc-400"
+                    style={theme ? { color: theme.muted } : undefined}
+                  >
+                    @{account.username}
+                  </p>
+                  <UserBadges account={account} isOwner={isOwner} />
+                </div>
+              </div>
+              <span
+                className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold ${
+                  theme
+                    ? ""
+                    : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                }`}
+                // Amber is a fixed accent that fights an arbitrary palette;
+                // themed, the pill borrows the card's own colours and the coin
+                // stays gold on its own.
+                style={theme ? { borderColor: theme.border, background: theme.surface, color: theme.text } : undefined}
+              >
+                <BsCoin className="h-4 w-4 shrink-0" />
+                {account.points ?? 0} pontos
+              </span>
             </div>
 
-            {error && (
-              <p className="text-xs font-medium text-red-600 dark:text-red-400">
-                {error}
-              </p>
+            {live && (
+              <Link
+                href={`/watch/${live.room}`}
+                onClick={onNavigate}
+                className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-500/20 dark:text-emerald-400"
+              >
+                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-500" />
+                Está numa sala pública agora — {live.peopleCount}{" "}
+                {live.peopleCount === 1 ? "pessoa" : "pessoas"}, entrar em &quot;{live.room}&quot;
+              </Link>
             )}
 
-            {/* Fundo do perfil. Drawn for everybody, locked for those without
-                the plan — same reasoning as the avatar rows: a perk nobody
-                sees is a perk nobody buys.
+            <div className="mt-4">
+              <InlineEdit
+                editable={isEditing}
+                open={openField === "bio"}
+                onOpen={() => setOpenField("bio")}
+                onClose={() => setOpenField(null)}
+                label="Editar descrição"
+                editor={
+                  <textarea
+                    autoFocus
+                    rows={3}
+                    maxLength={300}
+                    value={editBio}
+                    onChange={(e) => setEditBio(e.target.value)}
+                    placeholder="Escreva algo sobre você..."
+                    className="w-full resize-none rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    style={themedField}
+                  />
+                }
+              >
+                <p
+                  className="whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300"
+                  style={theme ? { color: theme.muted } : undefined}
+                >
+                  {(isEditing ? editBio : account.bio) || "Sem descrição."}
+                </p>
+              </InlineEdit>
+            </div>
 
-                In a bordered panel, like the banner section below: the form
-                used to be a column of loose rows with no edges, so a heading
-                and the controls under it did not visibly belong together. */}
-            <PlanSection tier="proMax" title="Música do perfil" locked={!canEditSong}>
-              <input
-                type="url"
-                inputMode="url"
-                disabled={!canEditSong}
-                value={editSong}
-                onChange={(e) => setEditSong(e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=..."
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            {/* The song, edited where it plays. Shown in edit mode even when
+                there is none, because an empty slot with a pencil is how
+                somebody discovers the feature exists. */}
+            {(account.profileSong || (isEditing && canEditSong)) && (
+              <div className="mt-4">
+                <InlineEdit
+                  editable={isEditing && canEditSong}
+                  open={openField === "song"}
+                  onOpen={() => setOpenField("song")}
+                  onClose={() => setOpenField(null)}
+                  label="Editar música"
+                  editor={
+                    <input
+                      autoFocus
+                      type="url"
+                      inputMode="url"
+                      value={editSong}
+                      onChange={(e) => setEditSong(e.target.value)}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                      style={themedField}
+                    />
+                  }
+                >
+                  {account.profileSong ? (
+                    <ProfileSongPlayer
+                      song={account.profileSong}
+                      // Never while editing: the card is being worked on, and
+                      // music starting under that is not a preview anybody
+                      // asked for.
+                      autoPlay={autoPlaySong && !isEditing}
+                    />
+                  ) : (
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400" style={themedHint}>
+                      Sem música no perfil.
+                    </p>
+                  )}
+                </InlineEdit>
+              </div>
+            )}
+
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <StatCard
+                theme={theme}
+                icon={<BsClock className="h-3.5 w-3.5" />}
+                label="Tempo em call"
+                seconds={account.callSeconds ?? 0}
               />
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Toca sozinha quando alguém abre o seu perfil. Na sala, aparece como um botão de
-                play. Ninguém leva música no meio de uma chamada sem pedir.
-              </p>
-            </PlanSection>
+              <StatCard
+                theme={theme}
+                icon={<MicIcon className="h-3.5 w-3.5" />}
+                label="Tempo com o mic aberto"
+                seconds={account.micSeconds ?? 0}
+              />
+              <StatCard
+                theme={theme}
+                icon={<ScreenIcon className="h-3.5 w-3.5" />}
+                label="Tempo compartilhando tela"
+                seconds={account.shareSeconds ?? 0}
+              />
+            </div>
 
-            <PlanSection tier="proMax" title="Fundo do perfil" locked={!canEditTheme}>
+            {/* Adding and blocking live on the profile because that is where you
+                land after clicking a name anywhere else — the room's participant
+                list, a chat message, the header. See components/SocialActions. */}
+            <SocialActions
+              userId={account.id}
+              displayName={account.displayName}
+              className="mt-5"
+              // Same callback the profile links use: opening the conversation
+              // window is leaving this card, so the dialog holding it closes.
+              onLeave={onNavigate}
+            />
+
+            <p className="mt-5 text-xs text-zinc-400 dark:text-zinc-600">No GoLive desde {memberSince}.</p>
+
+        {isEditing && (
+          <form onSubmit={handleSave} className="mt-5 flex flex-col gap-4">
+            <PlanSection
+              tier="proMax"
+              title="Fundo do perfil"
+              locked={!canEditTheme}
+              titleStyle={themedLabel}
+              neutralStyle={themedDivider}
+            >
               {/* Shown to everybody and disabled without the plan, rather
                   than replaced by a sentence: the controls are what explain
                   the perk — two colours and a direction — and a line of text
@@ -1076,7 +1329,7 @@ function ProfileContent({
                     </label>
                   </div>
                   {canEditTheme && (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400" style={themedHint}>
                       {/* No preview swatch on purpose: the card behind this
                           form already updates as the colours change, and a
                           second sample would eventually disagree with it. */}
@@ -1097,39 +1350,11 @@ function ProfileContent({
               </fieldset>
             </PlanSection>
 
-            {/* Display Name */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                <label htmlFor="edit-display-name">Nome de exibição</label>
-                <span className="text-zinc-400">{editDisplayName.length}/24</span>
-              </div>
-              <input
-                id="edit-display-name"
-                type="text"
-                maxLength={24}
-                value={editDisplayName}
-                onChange={(e) => setEditDisplayName(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-                required
-              />
-            </div>
-
-            {/* Bio */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                <label htmlFor="edit-bio">Descrição</label>
-                <span className="text-zinc-400">{editBio.length}/500</span>
-              </div>
-              <textarea
-                id="edit-bio"
-                rows={3}
-                maxLength={500}
-                value={editBio}
-                onChange={(e) => setEditBio(e.target.value)}
-                placeholder="Escreva algo sobre você..."
-                className="w-full resize-none rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-              />
-            </div>
+            {error && (
+              <p className="text-xs font-medium text-red-600 dark:text-red-400">
+                {error}
+              </p>
+            )}
 
             {/* Actions */}
             <div className="mt-2 flex items-center justify-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
@@ -1150,105 +1375,6 @@ function ProfileContent({
               </button>
             </div>
           </form>
-        ) : (
-          <>
-            <div className="flex flex-wrap items-end justify-between gap-3 pt-3">
-              <div className="min-w-0">
-                <h1
-                  className="flex items-center gap-1.5 truncate text-2xl font-semibold text-zinc-950 dark:text-zinc-50"
-                  style={theme ? { color: theme.text } : undefined}
-                >
-                  <span style={account.equippedNameColor ? { color: account.equippedNameColor } : undefined}>
-                    {account.displayName}
-                  </span>
-                  <VerifiedBadge flags={account?.flags} className="h-6 w-6 shrink-0" />
-                </h1>
-                <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                  <p
-                    className="text-sm text-zinc-500 dark:text-zinc-400"
-                    style={theme ? { color: theme.muted } : undefined}
-                  >
-                    @{account.username}
-                  </p>
-                  <UserBadges account={account} isOwner={isOwner} />
-                </div>
-              </div>
-              <span
-                className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold ${
-                  theme
-                    ? ""
-                    : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                }`}
-                // Amber is a fixed accent that fights an arbitrary palette;
-                // themed, the pill borrows the card's own colours and the coin
-                // stays gold on its own.
-                style={theme ? { borderColor: theme.border, background: theme.surface, color: theme.text } : undefined}
-              >
-                <BsCoin className="h-4 w-4 shrink-0" />
-                {account.points ?? 0} pontos
-              </span>
-            </div>
-
-            {live && (
-              <Link
-                href={`/watch/${live.room}`}
-                onClick={onNavigate}
-                className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-500/20 dark:text-emerald-400"
-              >
-                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-500" />
-                Está numa sala pública agora — {live.peopleCount}{" "}
-                {live.peopleCount === 1 ? "pessoa" : "pessoas"}, entrar em &quot;{live.room}&quot;
-              </Link>
-            )}
-
-            <p
-              className="mt-4 whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300"
-              style={theme ? { color: theme.muted } : undefined}
-            >
-              {account.bio || "Sem descrição."}
-            </p>
-
-            {account.profileSong && (
-              <div className="mt-4">
-                <ProfileSongPlayer song={account.profileSong} autoPlay={autoPlaySong} />
-              </div>
-            )}
-
-            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <StatCard
-                theme={theme}
-                icon={<BsClock className="h-3.5 w-3.5" />}
-                label="Tempo em call"
-                seconds={account.callSeconds ?? 0}
-              />
-              <StatCard
-                theme={theme}
-                icon={<MicIcon className="h-3.5 w-3.5" />}
-                label="Tempo com o mic aberto"
-                seconds={account.micSeconds ?? 0}
-              />
-              <StatCard
-                theme={theme}
-                icon={<ScreenIcon className="h-3.5 w-3.5" />}
-                label="Tempo compartilhando tela"
-                seconds={account.shareSeconds ?? 0}
-              />
-            </div>
-
-            {/* Adding and blocking live on the profile because that is where you
-                land after clicking a name anywhere else — the room's participant
-                list, a chat message, the header. See components/SocialActions. */}
-            <SocialActions
-              userId={account.id}
-              displayName={account.displayName}
-              className="mt-5"
-              // Same callback the profile links use: opening the conversation
-              // window is leaving this card, so the dialog holding it closes.
-              onLeave={onNavigate}
-            />
-
-            <p className="mt-5 text-xs text-zinc-400 dark:text-zinc-600">No GoLive desde {memberSince}.</p>
-          </>
         )}
       </div>
     </div>
