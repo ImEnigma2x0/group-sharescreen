@@ -12,6 +12,7 @@ import { useSignaling } from "@/lib/useSignaling";
 import { signalingClient } from "@/lib/signalingClient";
 import { getAccountToken, fetchAvatarOptions, type AvatarOptions } from "@/lib/accountApi";
 import { hasFeature } from "@/lib/entitlements";
+import { DEFAULT_AVATAR_PATH } from "@/components/UserAvatar";
 import { fetchCosmeticsCatalog, type CosmeticProduct } from "@/lib/cosmetics";
 import { prepareAvatarImage, AVATAR_IMAGE_ACCEPT, AVATAR_IMAGE_MAX_BYTES } from "@/lib/avatarImage";
 import { MdEdit, MdPhotoCamera, MdDeleteOutline } from "react-icons/md";
@@ -422,7 +423,10 @@ function ProfileContent({
   });
 
   const activeBgColor = isEditing ? editBgColor : account.equippedProfileColor;
-  const currentAvatar = isEditing ? previewAvatar : account.avatarUrl;
+  // Same fallback as everywhere else — see UserAvatar. In edit mode this is
+  // also what "Remover foto" leaves behind, which is the honest result: the
+  // picture is gone and the default is what they have.
+  const currentAvatar = (isEditing ? previewAvatar : account.avatarUrl) ?? DEFAULT_AVATAR_PATH;
   const currentBanner = isEditing ? previewBanner : account.bannerUrl;
   const canUploadBanner = hasFeature("banner_upload", authAccount?.features ?? []);
 
@@ -451,17 +455,13 @@ function ProfileContent({
       {/* Avatar overlapping banner and Edit Profile trigger */}
       <div className="relative -mt-12 flex items-end justify-between px-5 sm:-mt-16 sm:px-6">
         <div className="group relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border-4 border-white bg-zinc-100 shadow-md dark:border-zinc-950 dark:bg-zinc-900 sm:h-28 sm:w-28 flex items-center justify-center">
-          {currentAvatar ? (
-            <img
-              src={currentAvatar}
-              alt={account.displayName}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-emerald-500 to-teal-600 text-3xl font-bold text-white sm:text-4xl">
-              {account.displayName.slice(0, 1).toUpperCase()}
-            </span>
-          )}
+          {/* No empty case left to handle: currentAvatar falls back to the
+              first default, so there is always a picture here. */}
+          <img
+            src={currentAvatar}
+            alt={account.displayName}
+            className="h-full w-full object-cover"
+          />
 
         </div>
 
@@ -556,10 +556,19 @@ function ProfileContent({
                   Foto de perfil
                 </span>
 
+                {/* currentAvatar, not previewAvatar: somebody who never chose
+                    is *wearing* the first default everywhere else in the app,
+                    so the picker has to show it as theirs. Marking nothing
+                    would invite them to "pick" the avatar they already have
+                    and then wonder why nothing changed.
+
+                    "Remover foto" above stays on previewAvatar on purpose —
+                    that one asks whether there is a stored picture to clear,
+                    which is a different question. */}
                 <AvatarRow
                   label="Padrão"
                   paths={avatarOptions.defaults}
-                  selected={previewAvatar}
+                  selected={currentAvatar}
                   onPick={handlePickPreset}
                 />
 
@@ -567,7 +576,7 @@ function ProfileContent({
                   <AvatarRow
                     label="Avatares Pro"
                     paths={avatarOptions.gallery}
-                    selected={previewAvatar}
+                    selected={currentAvatar}
                     onPick={handlePickPreset}
                     locked={!avatarOptions.canUseGallery}
                     lockedHint="Disponível no Pro"

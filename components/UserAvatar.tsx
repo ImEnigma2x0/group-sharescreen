@@ -4,14 +4,26 @@ import { useState } from "react";
 
 // One face, drawn the same way everywhere it appears.
 //
-// The fallback is not decoration. An avatar is `null` for a guest, for an
-// account that never picked one, and for a Pro avatar whose subscription has
-// lapsed (the API hides those on the way out rather than deleting them) — and
-// a preset path can also simply 404 while the image files are still being
-// added. All four have to look deliberate rather than broken, so anything
-// that does not resolve becomes the person's initial on a colour derived from
-// their name: stable per person, so the same face keeps the same colour in
-// the participant list and in the chat.
+// Nobody is ever faceless: an avatar is `null` for a guest, for an account
+// that never picked one, and for a Pro avatar whose subscription has lapsed
+// (the API hides those on the way out rather than deleting them), and all
+// three fall back to the first free default here.
+//
+// Resolved when drawing rather than stored on the account, deliberately.
+// Writing it into the database would make "never chose" and "chose 01"
+// indistinguishable, which the profile picker needs to tell apart — and it
+// would leave guests, who have no account to write it to, as the one group
+// still without a face.
+//
+// The initials remain underneath, for the case the file itself does not
+// load: a preset can 404 while images are still being added, and a CDN can
+// be having a bad minute. That has to look deliberate rather than broken, so
+// it becomes the person's initial on a colour derived from their name —
+// stable per person, so the same face keeps the same colour in the
+// participant list and in the chat.
+
+/** The first free default (see the API's avatarCatalog). */
+export const DEFAULT_AVATAR_PATH = "/assets/default_avatars/01.png";
 
 /** Muted enough to sit behind white text without competing with the UI. */
 const COLORS = [
@@ -52,19 +64,20 @@ export function UserAvatar({
   size?: number;
   className?: string;
 }) {
+  const shown = src || DEFAULT_AVATAR_PATH;
   const [failed, setFailed] = useState(false);
   // Keyed on the source so a person changing their picture mid-call gets a
   // fresh attempt instead of inheriting the previous one's failure.
-  const [loadedSrc, setLoadedSrc] = useState(src);
-  if (loadedSrc !== src) {
-    setLoadedSrc(src);
+  const [loadedSrc, setLoadedSrc] = useState(shown);
+  if (loadedSrc !== shown) {
+    setLoadedSrc(shown);
     setFailed(false);
   }
 
   const style = { width: size, height: size };
   const shared = `shrink-0 rounded-full object-cover ${className}`;
 
-  if (!src || failed) {
+  if (failed) {
     return (
       <span
         aria-hidden
@@ -81,7 +94,7 @@ export function UserAvatar({
     // user-chosen CDN URL or a static preset, neither of which next/image can
     // optimise without a remote-pattern list that changes with the CDN.
     <img
-      src={src}
+      src={shown}
       alt=""
       style={style}
       onError={() => setFailed(true)}

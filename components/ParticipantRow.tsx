@@ -93,7 +93,7 @@ export function ParticipantRow({
   // none equipped.
   nameColor?: string | null;
   // Profile picture (see PeerInfo.avatarUrl). Null/undefined falls back to
-  // the person's initial — see UserAvatar.
+  // the first default avatar — see UserAvatar.
   avatarUrl?: string | null;
   // Owns this room (see server/roomStore.ts's RoomRecord.ownerId) — gets a
   // gold crown right after the name. Exactly one person in a room has this

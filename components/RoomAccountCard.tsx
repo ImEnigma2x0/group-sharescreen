@@ -10,6 +10,7 @@ import { trackEvent } from "@/lib/analytics";
 import { Tooltip } from "@/components/Tooltip";
 import { VerifiedBadgeIcon, ObsSourceIcon } from "@/components/icons";
 import { BetaMark } from "@/components/BetaMark";
+import { DEFAULT_AVATAR_PATH } from "@/components/UserAvatar";
 import { hasVerifiedBadge } from "@/lib/entitlements";
 
 // Who you are, at the foot of the room's chat column (see WatchRoom, from lg
@@ -61,9 +62,11 @@ export function RoomAccountCard({
   const initial = state.name.trim().slice(0, 1).toUpperCase();
   const verified = hasVerifiedBadge(state.account?.flags);
 
-  const avatar = account?.avatarUrl ? (
+  // Same rule as AccountMenu: a signed-in account with no picture gets the
+  // first default, a guest keeps the coloured initial that says so.
+  const avatar = account ? (
     <img
-      src={account.avatarUrl}
+      src={account.avatarUrl ?? DEFAULT_AVATAR_PATH}
       alt={state.name}
       className="h-10 w-10 shrink-0 rounded-xl object-cover [@media(max-height:52rem)]:h-8 [@media(max-height:52rem)]:w-8 [@media(max-height:52rem)]:rounded-lg"
     />

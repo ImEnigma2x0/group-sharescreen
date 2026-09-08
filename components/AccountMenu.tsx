@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { MdExpandMore } from "react-icons/md";
 import { signalingClient } from "@/lib/signalingClient";
 import { useSignaling } from "@/lib/useSignaling";
+import { DEFAULT_AVATAR_PATH } from "@/components/UserAvatar";
 import { useAuth } from "@/lib/AuthContext";
 import { trackEvent } from "@/lib/analytics";
 import { Popover } from "@/components/Tooltip";
@@ -244,9 +245,13 @@ export function AccountMenu() {
         aria-expanded={open}
         className="ml-1 flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-300 py-1 pr-1.5 pl-1 text-sm font-medium text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:bg-zinc-900"
       >
-        {authAccount?.avatarUrl ? (
+        {/* An account with no picture falls back to the first default (see
+            UserAvatar); a guest deliberately does not. The coloured initial is
+            what tells the two apart here, and there is no "(guest)" label
+            beside it to carry that on its own. */}
+        {authAccount ? (
           <img
-            src={authAccount.avatarUrl}
+            src={authAccount.avatarUrl ?? DEFAULT_AVATAR_PATH}
             alt={name}
             className="h-6 w-6 shrink-0 rounded-md object-cover"
           />
