@@ -10,7 +10,7 @@ import { acceptCall, endCall, fetchPendingCalls } from "@/lib/callsApi";
 import { showNotification } from "@/lib/notifications";
 import { getDesktopBridge } from "@/lib/desktop";
 import { startRingtone, stopRingtone } from "@/lib/soundEffects";
-import { UserAvatar } from "@/components/UserAvatar";
+import { DEFAULT_AVATAR_PATH, UserAvatar } from "@/components/UserAvatar";
 
 // The ringing screen — both directions of it.
 //
@@ -28,6 +28,22 @@ import { UserAvatar } from "@/components/UserAvatar";
 
 /** How the ring is announced on a device that is open but not being watched. */
 const CALL_NOTIFICATION_TAG = "call";
+
+/**
+ * The caller's picture as a URL that works outside this page.
+ *
+ * The shell's ringing window loads from `file://`, so anything site-relative —
+ * including the default avatar every account without one falls back to — has
+ * to be resolved against this origin first.
+ */
+function absoluteAvatar(avatarUrl: string | null): string | null {
+  if (typeof window === "undefined") return avatarUrl;
+  try {
+    return new URL(avatarUrl || DEFAULT_AVATAR_PATH, window.location.origin).href;
+  } catch {
+    return avatarUrl;
+  }
+}
 
 /**
  * What to say about a call that stopped ringing.
@@ -190,7 +206,19 @@ export function CallHost() {
         ? {
             id: incomingCall.id,
             name: incomingCall.from.displayName,
-            avatarUrl: incomingCall.from.avatarUrl,
+            // Resolved here rather than passed through raw, and absolute
+            // rather than site-relative. Two different bugs in one line:
+            //
+            // Most accounts have no avatar of their own, and UserAvatar quietly
+            // falls back to the default picture — so the ring inside the app
+            // always showed a face while the shell's window, handed a bare
+            // null, showed nothing at all. Doing the same fallback here is what
+            // makes the two windows agree.
+            //
+            // And the shell's window is a local file: a site-relative path
+            // there resolves against `file://`, not against the site, so even
+            // a real avatar would have to be absolute to load.
+            avatarUrl: absoluteAvatar(incomingCall.from.avatarUrl),
           }
         : null
     );

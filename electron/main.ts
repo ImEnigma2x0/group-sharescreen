@@ -1005,11 +1005,9 @@ function openCallWindow(call: CallRingingInfo) {
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    // A first guess only: this centres on the primary monitor, and on a
-    // multi-monitor desk the one being looked at is the one the cursor is on.
-    // centerOnCursorDisplay corrects it before the window is shown, so what
-    // this buys is that a failure there still leaves the window somewhere
-    // sensible rather than at the top-left corner.
+    // Centred by Electron, then pinned to the primary display below — see
+    // centerOnPrimaryDisplay for why that is a deliberate choice rather than
+    // the same thing said twice.
     center: true,
     alwaysOnTop: true,
     backgroundColor: "#101014",
@@ -1033,7 +1031,7 @@ function openCallWindow(call: CallRingingInfo) {
     // out of whatever is being typed in. A ring interrupts your attention, not
     // your sentence.
     window.showInactive();
-    centerOnCursorDisplay(window);
+    centerOnPrimaryDisplay(window);
   });
   window.on("closed", () => {
     if (callWindow === window) callWindow = null;
@@ -1041,11 +1039,24 @@ function openCallWindow(call: CallRingingInfo) {
   void window.loadFile(path.join(__dirname, "..", "call-overlay.html"));
 }
 
-/** Puts a window in the middle of whichever monitor the cursor is on. */
-function centerOnCursorDisplay(window: BrowserWindow) {
+/**
+ * Puts the window in the middle of monitor 1.
+ *
+ * The primary display, deliberately, and not the one the cursor happens to be
+ * on — which is what this used to do. Following the mouse sounds more helpful
+ * and is worse in practice: the ring appears somewhere different every time,
+ * so there is no place to learn to look, and the cursor is regularly parked on
+ * a second screen holding something the person is *not* looking at. The
+ * primary monitor is the one the desktop, the taskbar and every other
+ * notification already use, and being predictable beats being clever for a
+ * window that has seconds to be found.
+ *
+ * `workArea` rather than `bounds`: it excludes the taskbar, so the window is
+ * centred in the usable space instead of behind it.
+ */
+function centerOnPrimaryDisplay(window: BrowserWindow) {
   try {
-    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const { x, y, width, height } = display.workArea;
+    const { x, y, width, height } = screen.getPrimaryDisplay().workArea;
     const bounds = window.getBounds();
     window.setBounds({
       x: Math.round(x + (width - bounds.width) / 2),
@@ -1100,8 +1111,12 @@ function readCallInfo(raw: unknown): CallRingingInfo | null {
   if (!raw || typeof raw !== "object") return null;
   const value = raw as Record<string, unknown>;
   if (typeof value.id !== "string" || typeof value.name !== "string") return null;
+  // https anywhere, or anything on our own origin — which is what makes this
+  // work in development, where APP_ORIGIN is a plain-http localhost and an
+  // https-only rule silently dropped every avatar.
   const avatarUrl =
-    typeof value.avatarUrl === "string" && /^https:\/\//.test(value.avatarUrl)
+    typeof value.avatarUrl === "string" &&
+    (/^https:\/\//.test(value.avatarUrl) || value.avatarUrl.startsWith(APP_ORIGIN))
       ? value.avatarUrl
       : null;
   return { id: value.id.slice(0, 128), name: value.name.slice(0, 64), avatarUrl };

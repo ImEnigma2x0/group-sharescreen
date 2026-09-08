@@ -59,13 +59,36 @@
         gap: 12px;
         min-width: 0;
       }
+      /* The picture, and what is behind it when there is no picture.
+         Stacked rather than swapped: the initial is always drawn, the image
+         sits on top of it, and an image that is missing or fails to load
+         simply reveals it. No error handler, no second state to keep in
+         step. */
+      #face {
+        position: relative;
+        width: 48px;
+        height: 48px;
+        flex: none;
+      }
+      #initial {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: var(--panel);
+        color: var(--muted);
+        font-size: 20px;
+        font-weight: 600;
+      }
       #avatar {
+        position: absolute;
+        inset: 0;
         width: 48px;
         height: 48px;
         border-radius: 50%;
         object-fit: cover;
-        flex: none;
-        background: var(--panel);
       }
       #names { min-width: 0; }
       #name {
@@ -121,7 +144,10 @@
   </head>
   <body>
     <div id="who">
-      <img id="avatar" alt="" />
+      <span id="face">
+        <span id="initial"></span>
+        <img id="avatar" alt="" />
+      </span>
       <div id="names">
         <p id="name">Chamada recebida</p>
         <p id="sub">está te ligando…</p>
@@ -185,6 +211,11 @@
       overlay.data().then((call) => {
         if (!call) return;
         document.getElementById("name").textContent = call.name;
+        // Codepoint-aware, like the site's own UserAvatar: [...name][0] keeps
+        // an emoji or an accented letter whole where name[0] would cut it in
+        // half.
+        document.getElementById("initial").textContent =
+          [...call.name][0]?.toUpperCase() ?? "?";
         const avatar = document.getElementById("avatar");
         if (call.avatarUrl) avatar.src = call.avatarUrl;
         else avatar.hidden = true;
