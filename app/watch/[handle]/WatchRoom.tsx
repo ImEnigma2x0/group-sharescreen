@@ -882,7 +882,7 @@ type MobilePanel = "participants" | "chat";
 // dragged to something unusable is otherwise a fiddly thing to undo by hand.
 // The maximum is a ceiling, not the real limit: the drag also refuses to take
 // more than half the room, which on most screens bites first.
-const DEFAULT_CHAT_WIDTH = 320;
+const DEFAULT_CHAT_WIDTH = 350;
 const MIN_CHAT_WIDTH = 260;
 const MAX_CHAT_WIDTH = 720;
 
