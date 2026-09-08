@@ -42,6 +42,11 @@ import {
 // lib/entitlements.ts; a feature with no entry here still counts and is
 // simply not listed, which is the right behaviour for a client that predates
 // a perk the server already grants.
+// Every gated feature needs a line here, and the failure when one is missing
+// is silent: the row below drops anything it cannot name, so a perk the plan
+// really grants simply never appears on the page selling it. That is what
+// happened to the two avatar features — added to the ladder, never given a
+// sentence.
 const FEATURE_LABELS: Partial<Record<Feature, string>> = {
   verified_badge: "Seja verificado e ganhe um selo de autenticidade",
   quality_2160p: "Transmita em até 4K (2160p)",
@@ -49,6 +54,9 @@ const FEATURE_LABELS: Partial<Record<Feature, string>> = {
   fps_120: "Até 240 quadros por segundo",
   bitrate_maximo: "Bitrate de até 32 Mbps",
   no_ads: "Navegue sem anúncios",
+  avatar_gallery: "Avatares exclusivos para a sua foto de perfil",
+  avatar_upload: "Use qualquer imagem sua como foto de perfil",
+  banner_upload: "Envie o seu próprio banner de perfil",
 };
 
 function periodEndLabel(timestamp: number): string {
