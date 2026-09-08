@@ -646,6 +646,7 @@ export interface AdminAccountHit {
   displayName: string;
   /** The flags actually stored — never the projection, which adds PRO. */
   flags: string[];
+  points: number;
   premium: { method?: string; currentPeriodEnd: number; status: string } | null;
 }
 
@@ -729,4 +730,31 @@ export async function fetchAdminLog(
 
 export async function deleteAdminLogEntry(id: string): Promise<void> {
   await adminFetch(`/admin/logs/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** How an admin's points edit is meant to be applied. */
+export type PointsMode = "set" | "add" | "remove";
+
+/**
+ * Changes somebody's points and returns their new total.
+ *
+ * The mode goes to the server rather than being resolved here into a final
+ * number: an increment computed in the browser would be based on the total
+ * the page happened to load, and anything the account earned since would be
+ * erased by the save.
+ */
+export async function setAccountPoints(
+  id: string,
+  mode: PointsMode,
+  amount: number
+): Promise<number> {
+  const data = await adminFetch<{ account: { id: string; points: number } }>(
+    `/admin/accounts/${encodeURIComponent(id)}/points`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, amount }),
+    }
+  );
+  return data.account.points;
 }
