@@ -32,6 +32,7 @@ import { Popover, Tooltip } from "@/components/Tooltip";
 import { NotificationBell } from "@/components/NotificationBell";
 import { MdClose, MdOutlineImage, MdReply } from "react-icons/md";
 import { LuPanelRightClose } from "react-icons/lu";
+import { ChatImageModal, type ChatImagePreviewState } from "@/components/ChatImageModal";
 import {
   buildMentionsRegex,
   tokenizeMentions,
@@ -268,6 +269,7 @@ export function ChatPanel({
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [sendingImages, setSendingImages] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [imageModalPreview, setImageModalPreview] = useState<ChatImagePreviewState | null>(null);
   // Only ever counts up, and only to give each attachment a stable React key
   // — two copies of the same file are two attachments.
   const attachmentSeqRef = useRef(0);
@@ -1034,8 +1036,24 @@ export function ChatPanel({
                   <div className={grouped ? "flex items-start justify-between gap-1.5" : ""}>
                     <div className={grouped ? "min-w-0 flex-1" : ""}>
                       {m.kind === "gif" && m.url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={m.url} alt="GIF" className="mt-1 max-h-40 max-w-full rounded-md" />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setImageModalPreview({
+                              src: m.url!,
+                              alt: "GIF",
+                              images: [m.url!],
+                              currentIndex: 0,
+                            });
+                          }}
+                          title="Clique para ampliar o GIF"
+                          aria-label="Clique para ampliar o GIF"
+                          className="mt-1 inline-block cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition hover:opacity-90 text-left"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={m.url} alt="GIF" className="max-h-40 max-w-full rounded-md" />
+                        </button>
                       ) : (
                         <>
                           {/* Text and pictures are no longer either/or: a message
@@ -1049,25 +1067,30 @@ export function ChatPanel({
                           {messageImages(m).length > 0 && (
                             <div className="mt-1 flex flex-wrap gap-1.5">
                               {messageImages(m).map((url, index) => (
-                                // Wrapped in a link because the log shows these
-                                // small: the thumbnail is for following the
-                                // conversation, the tab is for actually looking
-                                // at what was sent.
-                                <a
+                                <button
                                   key={`${m.id}-img-${index}`}
-                                  href={url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-block"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setImageModalPreview({
+                                      src: url,
+                                      alt: "Imagem enviada no chat",
+                                      images: messageImages(m),
+                                      currentIndex: index,
+                                    });
+                                  }}
+                                  title="Clique para ampliar a imagem"
+                                  aria-label="Clique para ampliar a imagem"
+                                  className="inline-block cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition hover:opacity-90 text-left"
                                 >
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img
                                     src={url}
                                     alt="Imagem enviada no chat"
                                     loading="lazy"
-                                    className="max-h-56 max-w-full rounded-md border border-zinc-200 transition hover:opacity-90 dark:border-zinc-800"
+                                    className="max-h-56 max-w-full rounded-md border border-zinc-200 dark:border-zinc-800"
                                   />
-                                </a>
+                                </button>
                               ))}
                             </div>
                           )}
@@ -1401,6 +1424,10 @@ export function ChatPanel({
           </div>
         </form>
       )}
+      <ChatImageModal
+        preview={imageModalPreview}
+        onClose={() => setImageModalPreview(null)}
+      />
     </div>
   );
 }

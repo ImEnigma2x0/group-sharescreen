@@ -111,6 +111,7 @@ import { MobileQualitySheet, type MobileQualityChoice } from "@/components/Mobil
 import { UserProfileDialog } from "@/components/UserProfileDialog";
 import { prewarmCaptcha } from "@/lib/turnstile";
 import { RoomAccountCard } from "@/components/RoomAccountCard";
+import { openProModal } from "@/lib/proModal";
 import { VideoSourceTile } from "@/components/VideoSourceTile";
 import {
   videoSourceVolumeKey,
@@ -4861,11 +4862,14 @@ export function WatchRoom({ handle }: { handle: string }) {
                 points at the thing that sells it instead of at a donation
                 page — see app/pro. */}
             <Tooltip content="GoLive Pro — Seja Verificado, transmita em 4K/120fps e muito mais!" placement="bottom">
-              <Link
-                href="/pro"
-                target="_blank"
-                onClick={() => trackEvent("pro_button_clicked")}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-300 px-2 py-2 text-sm font-medium text-blue-600 transition hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/40 2xl:px-3"
+              <button
+                type="button"
+                onClick={() => {
+                  trackEvent("pro_button_clicked");
+                  openProModal();
+                }}
+                aria-label="GoLive Pro"
+                className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-blue-300 px-2 py-2 text-sm font-medium text-blue-600 transition hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/40 2xl:px-3"
               >
                 {/* Blue rather than inheriting the label's colour: this is the
                     same badge that appears next to a verified name (see
@@ -4873,7 +4877,7 @@ export function WatchRoom({ handle }: { handle: string }) {
                     keeps its own. */}
                 <VerifiedBadgeIcon className="h-5 w-5 shrink-0 text-blue-500" />
                 <span className="hidden sm:inline lg:hidden 2xl:inline">Pro</span>
-              </Link>
+              </button>
             </Tooltip>
 
             {/* Immediately left of "mais opções": the two are the only

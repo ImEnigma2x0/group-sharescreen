@@ -26,6 +26,7 @@ import { prepareAvatarImage, AVATAR_IMAGE_ACCEPT, AVATAR_IMAGE_MAX_BYTES } from 
 import { MdEdit, MdPhotoCamera, MdDeleteOutline } from "react-icons/md";
 import useNtPopups from "ntpopups";
 import { UserBadges } from "@/components/UserBadges";
+import { openProModal } from "@/lib/proModal";
 
 // A person's public profile, as a self-contained card.
 //
@@ -210,17 +211,17 @@ function PlanLink({
   const mark = planIcon(tier === "proMax" ? "gold_verified" : "blue_verified");
   const Mark = mark.Icon;
   return (
-    <Link
-      href="/pro"
-      // A new tab, because this is read mid-edit: following it in place would
-      // throw away a half-written bio to go and read about a plan.
-      target="_blank"
-      rel="noopener"
-      className={`inline-flex items-center gap-1 underline underline-offset-2 transition hover:text-zinc-800 dark:hover:text-zinc-200 ${className}`}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        openProModal();
+      }}
+      className={`inline-flex cursor-pointer items-center gap-1 underline underline-offset-2 transition hover:text-zinc-800 dark:hover:text-zinc-200 ${className}`}
     >
       <Mark className={`h-3.5 w-3.5 shrink-0 ${mark.className}`} />
       {label ?? `Disponível no ${tier === "proMax" ? "Pro Max" : "Pro"}.`}
-    </Link>
+    </button>
   );
 }
 

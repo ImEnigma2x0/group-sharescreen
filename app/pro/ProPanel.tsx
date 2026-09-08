@@ -119,7 +119,13 @@ function navigateTab(tab: Window, url: string): boolean {
   }
 }
 
-export function ProPanel() {
+export function ProPanel({
+  isModal = false,
+  onClose,
+}: {
+  isModal?: boolean;
+  onClose?: () => void;
+} = {}) {
   const { account, loading: resolvingAccount, refresh } = useAuth();
   const [plans, setPlans] = useState<PremiumPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
@@ -516,18 +522,32 @@ export function ProPanel() {
 
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-10">
-      <h1 className="flex items-center gap-1.5 text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-        {plan?.title ?? "GoLive Pro"}
-        {/* The plan's own mark, chosen by its `iconId` in the database (see
-            components/planIcons.tsx). Rendered from the plan rather than
-            hardcoded here for the same reason the price is read from it: the
-            product's identity is a row, not a literal in a page. */}
-        <PlanMark className={`h-6 w-6 shrink-0 ${mark.className}`} />
-      </h1>
-      <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-        {plan?.description ?? "Mais qualidade na sua transmissão."}
-      </p>
+    <div className={isModal ? "w-full p-5 sm:p-7" : "mx-auto w-full max-w-2xl px-4 py-10"}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-1.5 text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            {plan?.title ?? "GoLive Pro"}
+            {/* The plan's own mark, chosen by its `iconId` in the database (see
+                components/planIcons.tsx). Rendered from the plan rather than
+                hardcoded here for the same reason the price is read from it: the
+                product's identity is a row, not a literal in a page. */}
+            <PlanMark className={`h-6 w-6 shrink-0 ${mark.className}`} />
+          </h1>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            {plan?.description ?? "Mais qualidade na sua transmissão."}
+          </p>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 cursor-pointer"
+          >
+            <MdClose className="h-5 w-5" />
+          </button>
+        )}
+      </div>
 
       {/* Only with something to choose between. A single plan needs no picker,
           and drawing one would make the page look like it is withholding an
