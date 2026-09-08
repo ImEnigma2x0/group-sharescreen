@@ -5,6 +5,7 @@ import { MdExpandMore } from "react-icons/md";
 import { DEFAULT_PLAN_ICON_ID, PLAN_ICONS } from "@/components/planIcons";
 import { hasFeature, lockLabel, lockName, lockTier, type Feature } from "@/lib/entitlements";
 import { FINE_POINTER_QUERY, useMediaQuery } from "@/lib/useMediaQuery";
+import { openProModal } from "@/lib/proModal";
 
 // One of the room's quality dials, in whichever form the machine deserves.
 //
@@ -339,34 +340,22 @@ export function QualitySelect<T extends string | number>({
                     read in one order — what the option is, what it costs, and
                     the mark that names the plan. */}
                 {tier === "premium" ? (
-                  <a
-                    href="/pro"
-                    // A new tab, and this is not a preference: this dropdown
-                    // only exists inside a room, so following the link in
-                    // place would tear down a live call to go read a price.
-                    // It also lands correctly in the desktop shell, where
-                    // setWindowOpenHandler sends it to the system browser
-                    // while will-navigate would have replaced the app.
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    // The row's own mousedown selects; this one must not reach
-                    // it. (It would be refused anyway — commit() ignores a
-                    // locked option — but relying on that would make this
-                    // break the day locked rows become selectable.)
+                  <button
+                    type="button"
                     onMouseDown={(event) => event.stopPropagation()}
-                    // Not a tab stop: Tab closes the list (see
-                    // onListKeyDown), so a focusable link in here would be a
-                    // stop nobody can reach. /pro is one click away in the
-                    // header on every page, which is the keyboard route.
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openProModal();
+                    }}
                     tabIndex={-1}
-                    className="flex shrink-0 items-center gap-1 rounded px-1 text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+                    className="flex shrink-0 cursor-pointer items-center gap-1 rounded px-1 text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
                   >
                     <MARK.Icon
                       className={`h-4 w-4 shrink-0 ${MARK.className}`}
                       aria-label={MARK.label}
                     />
                     Pro
-                  </a>
+                  </button>
                 ) : (
                   locked && (
                     <span className="shrink-0 text-xs text-zinc-400 dark:text-zinc-600">

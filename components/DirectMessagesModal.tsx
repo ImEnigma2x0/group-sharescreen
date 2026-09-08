@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { MdArrowBack, MdClose, MdGif, MdImage, MdReply, MdSend } from "react-icons/md";
 import { GifPicker } from "@/components/GifPicker";
 import { Popover } from "@/components/Tooltip";
+import { ChatImageModal, type ChatImagePreviewState } from "@/components/ChatImageModal";
 import {
   CHAT_IMAGE_ACCEPT,
   CHAT_IMAGE_MAX_PER_MESSAGE,
@@ -109,6 +110,7 @@ export function DirectMessagesModal({
   const [replyingTo, setReplyingTo] = useState<DmReplyTo | null>(null);
   const [attachments, setAttachments] = useState<{ dataUrl: string }[]>([]);
   const [gifOpen, setGifOpen] = useState(false);
+  const [imageModalPreview, setImageModalPreview] = useState<ChatImagePreviewState | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -357,23 +359,53 @@ export function DirectMessagesModal({
                             </span>
                           )}
                           {message.kind === "gif" && message.url && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={message.url}
-                              alt="GIF"
-                              className="mb-1 max-h-56 rounded-lg"
-                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setImageModalPreview({
+                                  src: message.url!,
+                                  alt: "GIF",
+                                  images: [message.url!],
+                                  currentIndex: 0,
+                                })
+                              }
+                              title="Clique para ampliar o GIF"
+                              aria-label="Clique para ampliar o GIF"
+                              className="mb-1 block cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition hover:opacity-90 text-left"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={message.url}
+                                alt="GIF"
+                                className="max-h-56 rounded-lg"
+                              />
+                            </button>
                           )}
                           {message.images && message.images.length > 0 && (
                             <span className="mb-1 flex flex-col gap-1">
-                              {message.images.map((url) => (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
+                              {message.images.map((url, imgIdx) => (
+                                <button
                                   key={url}
-                                  src={url}
-                                  alt="Imagem"
-                                  className="max-h-56 rounded-lg object-contain"
-                                />
+                                  type="button"
+                                  onClick={() =>
+                                    setImageModalPreview({
+                                      src: url,
+                                      alt: "Imagem",
+                                      images: message.images,
+                                      currentIndex: imgIdx,
+                                    })
+                                  }
+                                  title="Clique para ampliar a imagem"
+                                  aria-label="Clique para ampliar a imagem"
+                                  className="block cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition hover:opacity-90 text-left"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={url}
+                                    alt="Imagem"
+                                    className="max-h-56 rounded-lg object-contain"
+                                  />
+                                </button>
                               ))}
                             </span>
                           )}
@@ -533,6 +565,10 @@ export function DirectMessagesModal({
           </>
         )}
       </div>
+      <ChatImageModal
+        preview={imageModalPreview}
+        onClose={() => setImageModalPreview(null)}
+      />
     </div>
   );
 }

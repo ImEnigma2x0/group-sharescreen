@@ -8,6 +8,7 @@ import { GlobeIcon, VerifiedBadgeIcon } from "@/components/icons";
 import { AccountMenu } from "@/components/AccountMenu";
 import { NotificationInboxBell } from "@/components/NotificationInboxBell";
 import { UpdateAppButton } from "@/components/UpdateAppButton";
+import { openProModal } from "@/lib/proModal";
 
 // The site's top bar: everything GoLive offers besides the room form itself,
 // in one place, on every page that isn't a room.
@@ -115,6 +116,12 @@ export function SiteHeader() {
                 aria-current={active ? "page" : undefined}
                 title={label}
                 target={target}
+                onClick={(e) => {
+                  if (href === "/pro" && pathname !== "/pro") {
+                    e.preventDefault();
+                    openProModal();
+                  }
+                }}
                 className={`inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-sm transition sm:px-2.5 ${active
                   ? "font-medium text-zinc-950 dark:text-zinc-50"
                   : "text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
