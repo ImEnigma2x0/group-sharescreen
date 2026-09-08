@@ -1,4 +1,4 @@
-import { VerifiedBadgeIcon } from "@/components/icons";
+import { GoldVerifiedBadgeIcon, VerifiedBadgeIcon } from "@/components/icons";
 
 // What a plan's `iconId` resolves to on screen.
 //
@@ -41,8 +41,10 @@ export const PLAN_ICONS: Record<PlanIconId, PlanIcon> = {
   // plan's subscribers wear beside their name — see lib/entitlements'
   // verifiedBadge, which is what decides gold there.
   gold_verified: {
-    Icon: VerifiedBadgeIcon,
-    className: "text-amber-400",
+    Icon: GoldVerifiedBadgeIcon,
+    // Empty, and not an oversight: this mark carries its colour in its own
+    // gradients, so a text colour here would do nothing.
+    className: "",
     glyph: "✔",
     label: "Verificado Pro Max",
   },
