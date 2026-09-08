@@ -84,6 +84,16 @@ export function profileThemeStyle(theme: ProfileTheme | null | undefined) {
 
   const mean = (luminance(theme.from) + luminance(theme.to)) / 2;
   const dark = mean < 0.5;
+  // The band where neither black nor white text is comfortable. A mid-tone
+  // background gives the winning colour a contrast ratio around 4-5:1 — legal
+  // for large text, thin for the small print — and no choice of text colour
+  // fixes that, because the problem is the background, not the letters.
+  //
+  // So the letters get a shadow instead: the opposite colour at low opacity,
+  // which darkens the pixels immediately behind the glyph and lifts it off
+  // whatever is there. Only in this band; on a properly light or dark
+  // background it would be visible fuzz solving nothing.
+  const midTone = mean >= 0.28 && mean <= 0.68;
 
   // Text is the extreme, not a softened one: the whole point of choosing it
   // from the background is maximum contrast, and a "softer" white here would
@@ -100,8 +110,27 @@ export function profileThemeStyle(theme: ProfileTheme | null | undefined) {
     dark,
     background: `linear-gradient(${theme.angle}deg, ${theme.from} 0%, ${theme.to} 100%)`,
     text,
-    /** Secondary text — readable, clearly not the primary line. */
-    muted: alpha(0.72),
+    /**
+     * Applied to every piece of text on the gradient. Empty unless the
+     * background sits in the awkward middle — see `midTone`.
+     */
+    textShadow: midTone
+      ? dark
+        ? "0 1px 2px rgba(0,0,0,0.55)"
+        : "0 1px 2px rgba(255,255,255,0.65)"
+      : undefined,
+    /**
+     * Secondary text. Raised from 0.72: against a gradient rather than a flat
+     * card, the same alpha reads noticeably weaker, and this is the tier most
+     * of the profile's prose sits in.
+     */
+    muted: alpha(0.86),
+    /**
+     * The quietest line on the card — the "member since" footnote. It used to
+     * be zinc-400, a fixed grey that lands somewhere between invisible and
+     * illegible depending on the colours behind it.
+     */
+    faint: alpha(0.68),
     /** Hairlines and dividers. */
     border: alpha(0.22),
     /** Panels sitting on the gradient: a wash of the text colour. */

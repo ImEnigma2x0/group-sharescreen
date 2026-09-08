@@ -233,14 +233,14 @@ function StatCard({
     >
       <div
         className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400"
-        style={theme ? { color: theme.muted } : undefined}
+        style={theme ? { color: theme.muted, textShadow: theme.textShadow } : undefined}
       >
         {icon}
         {label}
       </div>
       <p
         className="mt-1.5 text-lg font-semibold tabular-nums text-zinc-950 dark:text-zinc-50"
-        style={theme ? { color: theme.text } : undefined}
+        style={theme ? { color: theme.text, textShadow: theme.textShadow } : undefined}
       >
         {formatDuration(seconds)}
       </p>
@@ -717,7 +717,10 @@ function ProfileContent({
     }
   }
 
+  // With the day, not just the month: "desde agosto de 2026" reads as an
+  // approximation of something the site knows exactly.
   const memberSince = new Date(account.createdAt).toLocaleDateString("pt-BR", {
+    day: "numeric",
     month: "long",
     year: "numeric",
   });
@@ -745,8 +748,8 @@ function ProfileContent({
   // rewriting each className: an inline colour wins over any Tailwind
   // variant, so one object per role covers every element that plays that
   // role, and none can be missed by editing a class string wrong.
-  const themedLabel = theme ? { color: theme.text } : undefined;
-  const themedHint = theme ? { color: theme.muted } : undefined;
+  const themedLabel = theme ? { color: theme.text, textShadow: theme.textShadow } : undefined;
+  const themedHint = theme ? { color: theme.muted, textShadow: theme.textShadow } : undefined;
   const themedField = theme
     ? { background: theme.surface, borderColor: theme.border, color: theme.text }
     : undefined;
@@ -1092,14 +1095,14 @@ function ProfileContent({
                       maxLength={24}
                       value={editDisplayName}
                       onChange={(e) => setEditDisplayName(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-2xl font-semibold text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                      className="themed-field w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-2xl font-semibold text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                       style={themedField}
                     />
                   }
                 >
                   <h1
                     className="flex items-center gap-1.5 truncate text-2xl font-semibold text-zinc-950 dark:text-zinc-50"
-                    style={theme ? { color: theme.text } : undefined}
+                    style={theme ? { color: theme.text, textShadow: theme.textShadow } : undefined}
                   >
                     {/* The pending value, not the saved one: closing an editor
                         has to leave the card showing what saving would give. */}
@@ -1116,7 +1119,7 @@ function ProfileContent({
                 <div className="flex flex-wrap items-center gap-2 mt-0.5">
                   <p
                     className="text-sm text-zinc-500 dark:text-zinc-400"
-                    style={theme ? { color: theme.muted } : undefined}
+                    style={theme ? { color: theme.muted, textShadow: theme.textShadow } : undefined}
                   >
                     @{account.username}
                   </p>
@@ -1166,25 +1169,33 @@ function ProfileContent({
                     value={editBio}
                     onChange={(e) => setEditBio(e.target.value)}
                     placeholder="Escreva algo sobre você..."
-                    className="w-full resize-none rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    className="themed-field w-full resize-none rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                     style={themedField}
                   />
                 }
               >
                 <p
                   className="whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300"
-                  style={theme ? { color: theme.muted } : undefined}
+                  style={theme ? { color: theme.muted, textShadow: theme.textShadow } : undefined}
                 >
                   {(isEditing ? editBio : account.bio) || "Sem descrição."}
                 </p>
               </InlineEdit>
             </div>
 
-            {/* The song, edited where it plays. Shown in edit mode even when
-                there is none, because an empty slot with a pencil is how
-                somebody discovers the feature exists. */}
-            {(account.profileSong || (isEditing && canEditSong)) && (
-              <div className="mt-4">
+            {/* The song, edited where it plays.
+                Shown for the whole of edit mode, including to somebody
+                without the plan. It used to be gated on `canEditSong`, which
+                made the entire slot vanish for them — no editor, no lock, no
+                sign the feature exists — and vanish just the same if the API
+                had not yet started publishing the permission. A locked row
+                says which of those it is. */}
+            {(account.profileSong || isEditing) && (
+              // The gold ring, like every other locked Pro Max control — and
+              // only while editing: on somebody else's profile the ring would
+              // be selling a plan around a song that is simply playing.
+              <div className={`mt-4 ${planRowClass(isEditing && !canEditSong, "")}`}>
+                <PlanRing tier="proMax" locked={isEditing && !canEditSong} />
                 <InlineEdit
                   editable={isEditing && canEditSong}
                   open={openField === "song"}
@@ -1199,7 +1210,7 @@ function ProfileContent({
                       value={editSong}
                       onChange={(e) => setEditSong(e.target.value)}
                       placeholder="https://www.youtube.com/watch?v=..."
-                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                      className="themed-field w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                       style={themedField}
                     />
                   }
@@ -1213,8 +1224,12 @@ function ProfileContent({
                       autoPlay={autoPlaySong && !isEditing}
                     />
                   ) : (
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400" style={themedHint}>
+                    <p
+                      className="flex flex-wrap items-center gap-1.5 text-sm text-zinc-500 dark:text-zinc-400"
+                      style={themedHint}
+                    >
                       Sem música no perfil.
+                      {isEditing && !canEditSong && <PlanLink tier="proMax" className="text-xs" />}
                     </p>
                   )}
                 </InlineEdit>
@@ -1254,7 +1269,12 @@ function ProfileContent({
               onLeave={onNavigate}
             />
 
-            <p className="mt-5 text-xs text-zinc-400 dark:text-zinc-600">No GoLive desde {memberSince}.</p>
+            <p
+              className="mt-5 text-xs text-zinc-400 dark:text-zinc-600"
+              style={theme ? { color: theme.faint, textShadow: theme.textShadow } : undefined}
+            >
+              No GoLive desde {memberSince}.
+            </p>
 
         {isEditing && (
           <form onSubmit={handleSave} className="mt-5 flex flex-col gap-4">
@@ -1277,7 +1297,10 @@ function ProfileContent({
                       canEditTheme ? "" : "cursor-not-allowed opacity-50"
                     }`}
                   >
-                    <label className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+                    <label
+                      className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400"
+                      style={themedHint}
+                    >
                       Cor 1
                       <input
                         type="color"
@@ -1292,7 +1315,10 @@ function ProfileContent({
                         className="h-9 w-14 cursor-pointer rounded-lg border border-zinc-300 bg-transparent dark:border-zinc-700"
                       />
                     </label>
-                    <label className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+                    <label
+                      className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400"
+                      style={themedHint}
+                    >
                       Cor 2
                       <input
                         type="color"
@@ -1307,7 +1333,10 @@ function ProfileContent({
                         className="h-9 w-14 cursor-pointer rounded-lg border border-zinc-300 bg-transparent dark:border-zinc-700"
                       />
                     </label>
-                    <label className="flex flex-1 flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+                    <label
+                      className="flex flex-1 flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400"
+                      style={themedHint}
+                    >
                       Direção
                       <select
                         value={editTheme?.angle ?? 135}
@@ -1319,24 +1348,27 @@ function ProfileContent({
                           }))
                         }
                         className="h-9 w-full min-w-36 rounded-lg border border-zinc-300 bg-white px-2 text-xs text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                        style={themedField}
                       >
                         {GRADIENT_DIRECTIONS.map((direction) => (
-                          <option key={direction.angle} value={direction.angle}>
+                          <option
+                            key={direction.angle}
+                            value={direction.angle}
+                            // Its own colours, never the theme's. An <option>
+                            // inherits `color` from the select, but the open
+                            // dropdown is drawn by the browser on its own
+                            // background — so a white-text theme produced
+                            // white text on the browser's white menu, i.e.
+                            // nothing at all. This pair is legible in that
+                            // menu whatever the profile's colours are.
+                            style={{ color: "#18181b", backgroundColor: "#ffffff" }}
+                          >
                             {direction.label}
                           </option>
                         ))}
                       </select>
                     </label>
                   </div>
-                  {canEditTheme && (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400" style={themedHint}>
-                      {/* No preview swatch on purpose: the card behind this
-                          form already updates as the colours change, and a
-                          second sample would eventually disagree with it. */}
-                      O perfil acima já mostra o resultado. O texto vira claro ou escuro sozinho,
-                      conforme as cores escolhidas.
-                    </p>
-                  )}
                   {editTheme && canEditTheme && (
                     <button
                       type="button"

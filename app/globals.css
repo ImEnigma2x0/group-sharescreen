@@ -505,3 +505,17 @@ html .ntpopups-main {
     animation: none;
   }
 }
+
+/*
+ * A field on a themed profile: its placeholder follows the text colour.
+ *
+ * Inline styles cannot reach ::placeholder, and the profile card sets its
+ * field colours inline (they come from the person's own two colours, so there
+ * is no class to put them in). currentColor is what closes that gap — the
+ * inline `color` on the input flows through here, and one rule covers every
+ * field on the card instead of a fixed grey that only suits half of them.
+ */
+.themed-field::placeholder {
+  color: currentColor;
+  opacity: 0.55;
+}

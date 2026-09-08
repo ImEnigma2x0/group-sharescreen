@@ -49,4 +49,26 @@ assert.equal(profileThemeStyle({ from: "red", to: "#fff", angle: 0 }), null);
 assert.equal(isHexColor("#ff00ff"), true);
 assert.equal(isHexColor("javascript:alert(1)"), false);
 
+// Contrast tiers: the quiet lines must stay clearly above nothing, and the
+// mid-tone shadow must appear only where it is needed.
+{
+  const dark = style("#000000", "#111111");
+  assert.ok(dark.muted.startsWith("rgba(255,255,255,"), "fundo escuro pede texto claro em todos os niveis");
+  assert.ok(dark.faint.startsWith("rgba(255,255,255,"));
+  // The footnote is the quietest line, never the loudest.
+  const alphaOf = (rgba: string) => Number(rgba.slice(0, -1).split(",")[3]);
+  assert.ok(alphaOf(dark.faint) < alphaOf(dark.muted), "o rodape e o mais discreto");
+  assert.ok(alphaOf(dark.border) < alphaOf(dark.faint), "a borda e mais discreta que o texto");
+  // Black and white are unambiguous — no shadow needed.
+  assert.equal(dark.textShadow, undefined);
+  assert.equal(style("#ffffff", "#ffffff").textShadow, undefined);
+}
+
+// A mid-tone background is where neither text colour is comfortable, and the
+// shadow is what carries the letters there.
+{
+  const mid = style("#7f8c8d", "#95a5a6");
+  assert.ok(mid.textShadow, "tom medio precisa de sombra");
+}
+
 console.log("profileTheme: ok");
