@@ -173,6 +173,17 @@ export function ProPanel() {
   const active = isPremiumActive(premium);
   const cancelled = premium?.status === "cancelled";
   const viaPix = premium?.method === "pix";
+  // Subscribed *to the plan currently on screen*. The page used to ask only
+  // "is this person premium", which meant opening the other plan showed the
+  // "you already have this" panel — with a renew button quoting a price for
+  // something they had never bought.
+  const activeHere = active && premium?.plan === plan?.id;
+  // A card mandate that is still charging. Used for one thing only: there is
+  // nothing to sell somebody on the plan they are already subscribed to by
+  // card, so that state shows the status and the way out instead of two
+  // payment buttons. Switching *to another plan* is offered freely — the API
+  // ends the old mandate when the new payment lands.
+  const liveCardSub = active && !viaPix && !cancelled;
   /** The money for the code on screen has landed and bought time. */
   const pixPaid = Boolean(pix) && active && (premium?.currentPeriodEnd ?? 0) > pixBaselineEnd;
   /** A Pix code on screen that has not been paid yet. */
@@ -516,38 +527,23 @@ export function ProPanel() {
                     </button>
                   </span>
                 </div>
-              ) : active ? (
+              ) : activeHere && liveCardSub ? (
+                // The one state with nothing to sell: the card is already
+                // charging monthly for this exact plan, so both ways to pay
+                // would be wrong — a second mandate, or Pix days on top of a
+                // period already paid for.
                 <div className="flex flex-col gap-3">
                   <p className="text-sm text-zinc-700 dark:text-zinc-300">
-                    {viaPix
-                      ? // No renewal to mention: this ends, and saying "renova
-                        // em" would promise a charge that is never coming.
-                        `Acesso ativo até ${periodEndLabel(premium!.currentPeriodEnd)}. Pago com Pix, não renova sozinho.`
-                      : cancelled
-                        ? `Assinatura cancelada — seu acesso continua até ${periodEndLabel(premium!.currentPeriodEnd)}.`
-                        : `Assinatura ativa — renova em ${periodEndLabel(premium!.currentPeriodEnd)}.`}
+                    {`Assinatura ativa — renova em ${periodEndLabel(premium!.currentPeriodEnd)}.`}
                   </p>
-                  {viaPix && (
-                    <button
-                      type="button"
-                      onClick={handlePix}
-                      disabled={busy}
-                      className="flex items-center gap-2 self-start rounded-lg bg-[#32BCAD] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#2ba99b] disabled:opacity-60"
-                    >
-                      <PixIcon className="h-4 w-4 shrink-0" />
-                      {busy ? "Gerando…" : `Renovar — ${plan.pixPriceLabel}`}
-                    </button>
-                  )}
-                  {!cancelled && !viaPix && (
-                    <button
-                      type="button"
-                      onClick={handleCancel}
-                      disabled={busy}
-                      className="self-start rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                    >
-                      {busy ? "Cancelando…" : "Cancelar assinatura"}
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    disabled={busy}
+                    className="self-start rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                  >
+                    {busy ? "Cancelando…" : "Cancelar assinatura"}
+                  </button>
                 </div>
               ) : !plan.available ? (
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -555,6 +551,16 @@ export function ProPanel() {
                 </p>
               ) : (
                 <div className="flex flex-col gap-3">
+                  {activeHere && (
+                    <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                      {viaPix
+                        ? // No renewal to mention: this ends, and saying
+                          // "renova em" would promise a charge that is never
+                          // coming.
+                          `Acesso ativo até ${periodEndLabel(premium!.currentPeriodEnd)}. Pago com Pix, não renova sozinho.`
+                        : `Assinatura cancelada — seu acesso continua até ${periodEndLabel(premium!.currentPeriodEnd)}.`}
+                    </p>
+                  )}
                   {checkoutUrl && (
                     <div
                       role="status"
@@ -638,13 +644,22 @@ export function ProPanel() {
                       somebody who lost the window actually wants. */}
                   {!checkoutUrl && !pixPending && (
                     <div className="flex flex-wrap gap-2">
+                      {/* Offered on every plan, with no "cancel first". The
+                          API ends the mandate being replaced at the moment
+                          the new payment confirms (see
+                          endReplacedSubscription), so switching is one
+                          purchase rather than a cancellation somebody has to
+                          remember to undo — and a checkout abandoned halfway
+                          leaves the current plan exactly as it was. */}
                       <button
                         type="button"
                         onClick={handleSubscribe}
                         disabled={busy || (needsEmail && !email.trim())}
                         className="rounded-lg bg-zinc-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
                       >
-                        {busy ? "Abrindo o pagamento…" : `Assinar por ${plan.priceLabel}/mês`}
+                        {busy
+                          ? "Abrindo o pagamento…"
+                          : `${activeHere ? "Renovar" : active ? "Trocar" : "Assinar"} por ${plan.priceLabel}/mês`}
                       </button>
                       {/* Pix's own teal rather than the page's neutral: it is
                           the colour people recognise the method by, and it is
@@ -662,6 +677,14 @@ export function ProPanel() {
                         {busy ? "Gerando…" : `${plan.pixPriceLabel} por 30 dias`}
                       </button>
                     </div>
+                  )}
+                  {/* What "trocar" actually does, said before the money
+                      moves rather than discovered after it. */}
+                  {active && !activeHere && !checkoutUrl && !pixPending && (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      Ao concluir, este plano substitui o atual — a cobrança anterior é
+                      encerrada e o período recomeça.
+                    </p>
                   )}
                 </div>
               )}
