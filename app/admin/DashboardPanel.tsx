@@ -7,6 +7,7 @@ import { AdsterraPanel } from "./AdsterraPanel";
 import { GrantPremiumPanel } from "./GrantPremiumPanel";
 import { AccountFlagsPanel } from "./AccountFlagsPanel";
 import { AccountPointsPanel } from "./AccountPointsPanel";
+import { AutoFlagsPanel } from "./AutoFlagsPanel";
 import { AntiSpamPanel } from "./AntiSpamPanel";
 import { BannedWordsPanel } from "./BannedWordsPanel";
 import { BansPanel } from "./BansPanel";
@@ -24,6 +25,7 @@ export function DashboardPanel() {
       <GrantPremiumPanel />
       <AccountFlagsPanel />
       <AccountPointsPanel />
+      <AutoFlagsPanel />
       <SupportersPanel />
       <DesktopUpdatePanel />
       <AntiSpamPanel />

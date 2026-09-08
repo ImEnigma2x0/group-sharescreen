@@ -758,3 +758,66 @@ export async function setAccountPoints(
   );
   return data.account.points;
 }
+
+// ─── Regras de flag automática ───────────────────────────────────────────
+
+export interface AutoFlagRule {
+  id: string;
+  label: string;
+  kind: "signup" | "subscription";
+  planId: string | null;
+  from: number | null;
+  to: number | null;
+  flag: string;
+  enabled: boolean;
+  createdAt: number;
+}
+
+export async function fetchAutoFlagRules(): Promise<AutoFlagRule[]> {
+  const data = await adminFetch<{ rules: AutoFlagRule[] }>("/admin/auto-flags");
+  return data.rules;
+}
+
+export async function createAutoFlagRule(input: {
+  label: string;
+  kind: "signup" | "subscription";
+  planId: string | null;
+  /** ISO dates, as the date inputs produce them. Either may be null. */
+  from: string | null;
+  to: string | null;
+  flag: string;
+}): Promise<AutoFlagRule> {
+  const data = await adminFetch<{ rule: AutoFlagRule }>("/admin/auto-flags", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return data.rule;
+}
+
+export async function setAutoFlagRuleEnabled(id: string, enabled: boolean): Promise<AutoFlagRule[]> {
+  const data = await adminFetch<{ rules: AutoFlagRule[] }>(
+    `/admin/auto-flags/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    }
+  );
+  return data.rules;
+}
+
+export async function deleteAutoFlagRule(id: string): Promise<AutoFlagRule[]> {
+  const data = await adminFetch<{ rules: AutoFlagRule[] }>(
+    `/admin/auto-flags/${encodeURIComponent(id)}`,
+    { method: "DELETE" }
+  );
+  return data.rules;
+}
+
+/** Applies every rule to every account. Returns how much it granted. */
+export async function runAutoFlagRules(): Promise<{ accounts: number; grants: number }> {
+  return adminFetch<{ accounts: number; grants: number }>("/admin/auto-flags/run", {
+    method: "POST",
+  });
+}

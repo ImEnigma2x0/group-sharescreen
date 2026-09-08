@@ -64,7 +64,7 @@ export function BadgesPanel() {
           Badges
         </h1>
         <p className="max-w-2xl text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
-          Marcas que aparecem no perfil de quem as tem. Badges são diferentes de qualquer outra coisa, elas são especiais. Algumas fáceis de obter, outras quase impossíveis. Se alguém tem uma badge, essa pessoa fica marcada pra sempre como diferente de todas as outras.
+          Marcas que aparecem no perfil de quem as tem. Badges são diferentes de qualquer outra coisa, <b>elas são especiais.</b> Algumas fáceis de obter, outras quase impossíveis. Se alguém tem uma badge, essa pessoa fica marcada pra sempre como diferente de todas as outras.
         </p>
         {account && badges.length > 0 && (
           <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
