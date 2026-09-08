@@ -1,4 +1,5 @@
 import {
+  isCallRoomHandle,
   isPrivateRoomHandle,
   PRIVATE_ROOM_PREFIX,
   splitPrivateRoomHandle,
@@ -55,6 +56,12 @@ function isRecentRoom(value: unknown): value is RecentRoom {
   return (
     typeof handle === "string" &&
     HANDLE_RE.test(handle) &&
+    // Dropped on the way *out* of storage as well as on the way in, so a call
+    // room written by a build that predates this rule does not sit in
+    // somebody's list forever waiting to be clicked. Same place the junk
+    // handles are dropped, and for the same reason: this is the one gate
+    // every read goes through.
+    !isCallRoomHandle(handle) &&
     typeof visitedAt === "number" &&
     Number.isFinite(visitedAt)
   );
@@ -121,6 +128,12 @@ function persist(next: RecentRoom[]) {
 export function rememberRecentRoom(handle: string, now = Date.now()) {
   if (typeof window === "undefined") return;
   if (!HANDLE_RE.test(handle)) return;
+  // A call is not somewhere you go back to. Its room is generated per call,
+  // named after nothing, and dead the moment both people leave — so a button
+  // offering to re-enter it is a button that leads to an empty room with a
+  // name nobody recognizes, taking one of the three slots from a room that
+  // somebody actually chose.
+  if (isCallRoomHandle(handle)) return;
   const existing = getRecentRooms();
   // Already on the list: leave the *order* alone. Re-entering the second slot
   // would otherwise bump it to the top and shuffle the other two, which is

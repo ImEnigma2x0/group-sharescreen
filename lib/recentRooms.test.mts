@@ -176,3 +176,29 @@ test("presents public and private handles as the names people know", () => {
     code: null,
   });
 });
+
+test("a room a call turned into is never remembered", () => {
+  // The generated shape, exactly as the API mints it (see its callStore's
+  // makeCallRoomHandle): "priv-call-<10>-<6 dígitos>".
+  rememberRecentRoom("priv-call-sdcbprqxwc-227466", 1);
+  assert.deepEqual(getRecentRooms(), [], "a call room takes no slot");
+
+  // A room somebody deliberately named this way is not a call room and is
+  // theirs to keep — the match is on the generated shape, not on the prefix.
+  rememberRecentRoom("priv-call-me-maybe-123456", 2);
+  assert.deepEqual(getRecentRooms(), [{ handle: "priv-call-me-maybe-123456", visitedAt: 2 }]);
+});
+
+test("a call room already in storage is dropped on read", () => {
+  // What somebody who answered a call on the previous build has sitting in
+  // localStorage right now. It has to disappear on its own: nothing ever
+  // writes that list again except a room being entered.
+  store.set(
+    "sharescreen:recentRooms:v1",
+    JSON.stringify([
+      { handle: "priv-call-sdcbprqxwc-227466", visitedAt: 3 },
+      { handle: "reuniao-time", visitedAt: 2 },
+    ])
+  );
+  assert.deepEqual(getRecentRooms(), [{ handle: "reuniao-time", visitedAt: 2 }]);
+});

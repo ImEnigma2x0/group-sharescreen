@@ -85,6 +85,22 @@ export function isPrivateRoomHandle(handle: string): boolean {
   return handle.startsWith(PRIVATE_ROOM_PREFIX);
 }
 
+/**
+ * Whether a handle is a room a call turned into.
+ *
+ * Mirrors the API's own isCallRoomHandle (see its callStore.ts), shape and
+ * all: "priv-call-<10 aleatórios>-<6 dígitos>". Matched strictly rather than
+ * by the "priv-call-" prefix alone, so a room somebody deliberately named
+ * "priv-call-me-maybe" is still an ordinary room they get to keep.
+ *
+ * What it is for is deciding where a room does *not* belong. A call room is
+ * generated, single-use and named after nothing: it has no place in a list of
+ * rooms somebody would want to go back to.
+ */
+export function isCallRoomHandle(handle: string): boolean {
+  return /^priv-call-[a-z0-9]{10}-\d{6}$/.test(handle);
+}
+
 // A private room's handle carries its own access code: "priv-<nome>-<123456>".
 // The client mints the code when creating the room and the server simply
 // parses it back out of the handle (see server/signaling.ts's
