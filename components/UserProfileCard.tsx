@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useSignaling } from "@/lib/useSignaling";
 import { signalingClient } from "@/lib/signalingClient";
 import { getAccountToken, fetchAvatarOptions, type AvatarOptions } from "@/lib/accountApi";
+import { hasFeature } from "@/lib/entitlements";
 import { fetchCosmeticsCatalog, type CosmeticProduct } from "@/lib/cosmetics";
 import { prepareAvatarImage, AVATAR_IMAGE_ACCEPT, AVATAR_IMAGE_MAX_BYTES } from "@/lib/avatarImage";
 import { MdEdit, MdPhotoCamera, MdDeleteOutline } from "react-icons/md";
@@ -232,10 +233,13 @@ function ProfileContent({
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null | undefined>(undefined);
   const [ownedBgColors, setOwnedBgColors] = useState<CosmeticProduct[]>([]);
   const [avatarOptions, setAvatarOptions] = useState<AvatarOptions | null>(null);
+  const [previewBanner, setPreviewBanner] = useState<string | null>(account.bannerUrl ?? null);
+  const [bannerDataUrl, setBannerDataUrl] = useState<string | null | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
 
   // Sync state if profile prop changes
   useEffect(() => {
@@ -244,6 +248,8 @@ function ProfileContent({
     setEditBgColor(account.equippedProfileColor ?? null);
     setPreviewAvatar(account.avatarUrl ?? null);
     setAvatarDataUrl(undefined);
+    setPreviewBanner(account.bannerUrl ?? null);
+    setBannerDataUrl(undefined);
   }, [account]);
 
   // Load cosmetics when entering edit mode or when owned items change
@@ -311,6 +317,33 @@ function ProfileContent({
     }
   }
 
+  async function handleBannerPicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    if (file.size > AVATAR_IMAGE_MAX_BYTES) {
+      setError(`O banner deve ter no máximo ${Math.round(AVATAR_IMAGE_MAX_BYTES / (1024 * 1024))} MB.`);
+      return;
+    }
+    try {
+      // The same preparation the avatar gets, and deliberately so: it caps the
+      // dimensions and re-encodes, which is what keeps a 12MP phone photo from
+      // being posted to the CDN whole.
+      const prepared = await prepareAvatarImage(file);
+      setPreviewBanner(prepared.dataUrl);
+      setBannerDataUrl(prepared.dataUrl);
+    } catch {
+      setError("Não foi possível processar o banner selecionado.");
+    } finally {
+      if (bannerInputRef.current) bannerInputRef.current.value = "";
+    }
+  }
+
+  function handleRemoveBanner() {
+    setPreviewBanner(null);
+    setBannerDataUrl(null);
+  }
+
   function handleRemoveAvatar() {
     setPreviewAvatar(null);
     setAvatarDataUrl(null);
@@ -323,6 +356,8 @@ function ProfileContent({
     setEditBgColor(account.equippedProfileColor ?? null);
     setPreviewAvatar(account.avatarUrl ?? null);
     setAvatarDataUrl(undefined);
+    setPreviewBanner(account.bannerUrl ?? null);
+    setBannerDataUrl(undefined);
     setError(null);
   }
 
@@ -341,6 +376,7 @@ function ProfileContent({
         displayName: trimmedName,
         bio: editBio.trim() ? editBio.trim() : null,
         avatar: avatarDataUrl,
+        banner: bannerDataUrl,
         equippedProfileColor: editBgColor,
       });
 
@@ -372,6 +408,8 @@ function ProfileContent({
 
   const activeBgColor = isEditing ? editBgColor : account.equippedProfileColor;
   const currentAvatar = isEditing ? previewAvatar : account.avatarUrl;
+  const currentBanner = isEditing ? previewBanner : account.bannerUrl;
+  const canUploadBanner = hasFeature("banner_upload", authAccount?.features ?? []);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
@@ -379,9 +417,9 @@ function ProfileContent({
       <div
         className="h-32 w-full transition-all duration-300 sm:h-44"
         style={
-          account.bannerUrl
+          currentBanner
             ? {
-                backgroundImage: `url(${account.bannerUrl})`,
+                backgroundImage: `url(${currentBanner})`,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }
@@ -420,6 +458,14 @@ function ProfileContent({
           onChange={handleAvatarPicked}
         />
 
+        <input
+          ref={bannerInputRef}
+          type="file"
+          accept={AVATAR_IMAGE_ACCEPT}
+          className="hidden"
+          onChange={handleBannerPicked}
+        />
+
         {isOwner && !isEditing && (
           <button
             type="button"
@@ -449,6 +495,42 @@ function ProfileContent({
                   Remover foto
                 </button>
               )}
+            </div>
+
+            {/* Banner. No catalogue to offer beside it — the whole feature is
+                bringing your own picture, so this is a button and a plan,
+                nothing more. Drawn for everybody rather than hidden from
+                non-subscribers, same reasoning as the locked avatar rows. */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Banner
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!canUploadBanner}
+                  onClick={() => bannerInputRef.current?.click()}
+                  className="flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  <MdPhotoCamera className="h-3.5 w-3.5" />
+                  Enviar banner
+                </button>
+                {previewBanner && canUploadBanner && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveBanner}
+                    className="flex items-center gap-1 text-xs font-medium text-red-600 transition hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    <MdDeleteOutline className="h-4 w-4" />
+                    Remover banner
+                  </button>
+                )}
+                {!canUploadBanner && (
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Exclusivo do Pro Max.
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Avatar picker. Locked rows are drawn rather than hidden: a

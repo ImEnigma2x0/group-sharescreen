@@ -30,7 +30,8 @@ export type Feature =
   | "verified_badge"
   | "no_ads"
   | "avatar_gallery"
-  | "avatar_upload";
+  | "avatar_upload"
+  | "banner_upload";
 
 export type FeatureTier = "free" | "account" | "premium" | "premium_max";
 
@@ -44,6 +45,7 @@ export const FEATURE_TIERS: Record<Feature, FeatureTier> = {
   no_ads: "premium",
   avatar_gallery: "premium",
   avatar_upload: "premium_max",
+  banner_upload: "premium_max",
 };
 
 /**

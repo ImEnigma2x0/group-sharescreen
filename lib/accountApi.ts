@@ -331,6 +331,8 @@ export type UpdateProfileInput = {
   displayName?: string;
   bio?: string | null;
   avatar?: string | null;
+  /** Same three shapes as `avatar`: a data URL to upload, null to clear, absent to leave alone. */
+  banner?: string | null;
   equippedProfileColor?: string | null;
 };
 
