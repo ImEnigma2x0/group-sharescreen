@@ -49,7 +49,7 @@ assert.ok(proPremiumBadges.some((b) => b.id === "pro"), "User with premium objec
 const proFeatureBadges = getUserBadges({ username: "feature_user", features: ["verified_badge"] });
 assert.ok(proFeatureBadges.some((b) => b.id === "pro"), "User with verified_badge feature should receive pro badge");
 
-// 5. Beta tester badge (early account created before 08/09/2026)
+// 5. Beta tester badge (early account created before 10/09/2026)
 const earlyAccountBadges = getUserBadges({
   username: "early_adopter",
   createdAt: BETA_TESTER_CUTOFF_MS - 1000,
