@@ -5143,7 +5143,24 @@ export function WatchRoom({ handle }: { handle: string }) {
           see MobileQualitySheet for why this is a question rather than a
           setting on this one platform. */}
       {profileUserId && (
-        <UserProfileDialog userId={profileUserId} onClose={() => setProfileUserId(null)} />
+        <UserProfileDialog
+          userId={profileUserId}
+          // Whether this id belongs to somebody without an account, answered
+          // from the participant list rather than by asking the API — for a
+          // guest, `userId` is a guest id and GET /users/:id would 404 on it.
+          // Looked up here rather than passed through onOpenProfile so the
+          // four rows that open a profile keep handing over one string.
+          //
+          // Yourself is never found here (you are not in your own peer list)
+          // and never needs to be: a guest's own row carries no userId at all,
+          // so it does not open a profile in the first place.
+          guest={(() => {
+            const peer = state.peers.find((p) => p.userId === profileUserId);
+            if (!peer?.isGuest) return undefined;
+            return { name: peer.name, avatarUrl: peer.avatarUrl };
+          })()}
+          onClose={() => setProfileUserId(null)}
+        />
       )}
 
       {qualityPrompt === "screen" && (

@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { UserProfileCard } from "./UserProfileCard";
+import { GuestProfileCard } from "./GuestProfileCard";
 import { MdClose, MdOpenInNew } from "react-icons/md";
 import { Tooltip } from "./Tooltip";
 
@@ -24,9 +25,20 @@ const subscribeNothing = () => () => {};
 
 export function UserProfileDialog({
   userId,
+  guest,
   onClose,
 }: {
   userId: string;
+  /**
+   * Set when this id belongs to somebody with no account, in which case there
+   * is nothing to fetch and everything to show is right here — see
+   * GuestProfileCard.
+   *
+   * Passed in rather than discovered, because the only place that knows is the
+   * participant list this was opened from: `userId` for a guest is a guest id,
+   * and asking the API about one would just 404.
+   */
+  guest?: { name: string; avatarUrl?: string | null };
   onClose: () => void;
 }) {
   const onClient = useSyncExternalStore(subscribeNothing, () => true, () => false);
@@ -78,16 +90,22 @@ export function UserProfileDialog({
             an icon beside the close button it is the same kind of thing in
             the same place: something you do to this window. */}
         <div className="absolute right-3 top-3 z-10 flex items-center gap-1.5">
-          <Tooltip content="Abrir perfil em uma nova aba">
-            <Link
-              href={`/user/${userId}`}
-              target="_blank"
-              aria-label="Abrir perfil em uma nova aba"
-              className="flex rounded-full bg-black/50 p-2 text-white transition hover:bg-black/70"
-            >
-              <MdOpenInNew className="h-4 w-4" />
-            </Link>
-          </Tooltip>
+          {/* A guest has no page to open: /user/[id] is addressed by account,
+              and a guest id there is a 404. Hidden rather than disabled — a
+              control that explains it goes nowhere is still a control, and
+              this one has nothing to explain. */}
+          {!guest && (
+            <Tooltip content="Abrir perfil em uma nova aba">
+              <Link
+                href={`/user/${userId}`}
+                target="_blank"
+                aria-label="Abrir perfil em uma nova aba"
+                className="flex rounded-full bg-black/50 p-2 text-white transition hover:bg-black/70"
+              >
+                <MdOpenInNew className="h-4 w-4" />
+              </Link>
+            </Tooltip>
+          )}
           <Tooltip content="Fechar">
             <button
               type="button"
@@ -100,7 +118,11 @@ export function UserProfileDialog({
           </Tooltip>
         </div>
 
-        <UserProfileCard id={userId} onNavigate={onClose} />
+        {guest ? (
+          <GuestProfileCard name={guest.name} avatarUrl={guest.avatarUrl} />
+        ) : (
+          <UserProfileCard id={userId} onNavigate={onClose} />
+        )}
 
       </div>
       </div>

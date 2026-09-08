@@ -134,10 +134,15 @@ export function ParticipantRow({
   // Whether the screen/camera split is actually known for this peer — see
   // the `screen`/`camera` props.
   const knowsChannels = screen != null || camera != null;
-  // A guest has no account behind it — nowhere for /user/[id] to point — and
-  // an older server that doesn't send userId yet leaves this peer
-  // unclickable rather than linking to a broken profile.
-  const canOpenProfile = !isGuest && Boolean(userId);
+  // A guest now has a profile of its own — a small one saying there is no
+  // account behind the name (see GuestProfileCard) — so the name is clickable
+  // for everybody the server identified. An older server that doesn't send
+  // userId yet still leaves the peer inert rather than opening a card about
+  // nobody.
+  const canOpenDialog = Boolean(userId) && Boolean(onOpenProfile);
+  // Navigation is still account-only: /user/[id] is addressed by account and a
+  // guest id there is a 404, so a guest's name is a button or nothing at all.
+  const canOpenPage = !isGuest && Boolean(userId);
   const nameElement = (
     <DisplayUserName
       name={name}
@@ -190,7 +195,7 @@ export function ParticipantRow({
           no baseline relationship left to preserve. */}
       <span className="flex min-w-0 items-center gap-1">
         <UserAvatar src={avatarUrl} name={name} size={22} />
-        {canOpenProfile && onOpenProfile ? (
+        {canOpenDialog && onOpenProfile ? (
           // A button, not a styled link: this goes nowhere, and marking it up
           // as navigation would promise a middle-click and a "copy link
           // address" that do not exist. The link below is still the right
@@ -207,7 +212,7 @@ export function ParticipantRow({
           >
             {nameElement}
           </button>
-        ) : canOpenProfile ? (
+        ) : canOpenPage ? (
           <Link href={`/user/${userId}`} target="_blank" className="min-w-0 hover:underline">
             {nameElement}
           </Link>
