@@ -150,6 +150,7 @@ import {
 } from "@/components/icons";
 import { Tooltip, Popover } from "@/components/Tooltip";
 import { ThemeSegmented } from "@/components/ThemeToggle";
+import { isAppShell } from "@/lib/desktop";
 import { getProfileSongAutoplay, setProfileSongAutoplay } from "@/lib/profileSong";
 import { useMediaQuery, SM_BREAKPOINT_QUERY, LG_BREAKPOINT_QUERY } from "@/lib/useMediaQuery";
 import {
@@ -1125,6 +1126,8 @@ export function WatchRoom({ handle }: { handle: string }) {
     }
     micBeforeDeafenRef.current = false;
   }, [micsMuted, isMicOn, setMicOn]);
+  // Which shell this is, read once — see lib/desktop's isAppShell.
+  const [appShell] = useState(() => isAppShell());
   const [soundEffectsOn, setSoundEffectsOn] = useState(() => getSoundEffectsEnabled());
   const [profileSongAutoplay, setProfileSongAutoplayState] = useState(() =>
     getProfileSongAutoplay()
@@ -2629,9 +2632,31 @@ export function WatchRoom({ handle }: { handle: string }) {
             Entrar na sala {privateRoomParts ? privateRoomParts.name : handle}
           </h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Escolha um nome para entrar nesta sala.
+            {appShell
+              ? "No aplicativo é preciso ter uma conta para entrar numa sala."
+              : "Escolha um nome para entrar nesta sala."}
           </p>
-          {creatingAccount ? (
+          {/* The app has no guest mode — the API refuses a guest register from
+              an installed shell (see signaling.ts), so the name box here would
+              be a form whose only outcome is an error. */}
+          {appShell && !creatingAccount ? (
+            <div className="mt-8 flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => setCreatingAccount(true)}
+                className="rounded-lg bg-zinc-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+              >
+                Criar uma conta
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccountModal("login")}
+                className="text-sm font-medium text-zinc-500 underline underline-offset-2 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              >
+                Já tenho uma conta
+              </button>
+            </div>
+          ) : creatingAccount ? (
             <CreateAccountForm
               initialDisplayName={nameInput}
               onCancel={() => setCreatingAccount(false)}

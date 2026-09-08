@@ -1,5 +1,6 @@
 "use client";
 
+import { isAppShell } from "@/lib/desktop";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -125,6 +126,10 @@ export default function Home() {
   // an effect rather than during render, which is what React asks for.
   const roomExistsAnswersRef = useRef(roomExistsAnswers);
 
+  // Which shell this is, read once. `useState` with an initializer rather
+  // than a plain call: the answer comes from window, so it must not run
+  // during the server render — and it cannot change while the page is open.
+  const [appShell] = useState(() => isAppShell());
   const [mode, setMode] = useState<IdentityMode>("landing");
   const [nameInput, setNameInput] = useState("");
   // A social login that turned out to be a signup. It takes over the whole
@@ -539,7 +544,29 @@ export default function Home() {
             />
           ) : !registered ? (
             <>
-              {mode === "landing" && (
+              {/* The app has no guest mode — the API refuses a guest register
+                  from an installed shell, so offering the name box here would
+                  be a form whose only outcome is an error. The two account
+                  buttons below it are the whole flow there. */}
+              {mode === "landing" && appShell && (
+                <div className="mt-8 flex flex-col gap-3">
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                    No aplicativo é preciso ter uma conta. É rápido, e ela guarda seu nome, seus
+                    amigos e seu plano entre os aparelhos.
+                  </p>
+                  <button type="button" onClick={openCreateMode} className={primaryButtonClass}>
+                    Criar uma conta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode("login")}
+                    className={`${linkButtonClass} self-center`}
+                  >
+                    Já tenho uma conta
+                  </button>
+                </div>
+              )}
+              {mode === "landing" && !appShell && (
                 <form onSubmit={handleGuestSubmit} className="mt-8 flex flex-col gap-3">
                   <label htmlFor="name" className={labelClass}>
                     Seu nome

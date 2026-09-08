@@ -249,3 +249,15 @@ export async function armSavedShareSource(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Either installed shell, desktop or Android.
+ *
+ * The app is account-only (the API refuses a guest register from it — see
+ * signaling.ts), so several screens have to offer signing in instead of a
+ * name box. One question, asked in one place, so a third shell is one line
+ * here rather than a hunt through the screens.
+ */
+export function isAppShell(): boolean {
+  return isDesktopApp() || isMobileApp();
+}
