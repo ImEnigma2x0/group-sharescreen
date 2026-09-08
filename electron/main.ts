@@ -42,6 +42,7 @@ import {
   SYSTEM_AUDIO_ARG,
   VERSION_ARG,
   type CallOverlayChoice,
+  type CallOverlayData,
   type CallRingingInfo,
   type PickerAudioApp,
   type PickerChoice,
@@ -996,10 +997,19 @@ function openCallWindow(call: CallRingingInfo) {
   if (callWindow) return;
 
   callWindow = new BrowserWindow({
-    width: 360,
-    height: 252,
+    // Bigger than the card it holds. The window is transparent and the card is
+    // centred in it, so the slack is invisible — and it is what the drop
+    // shadow is drawn into, plus the room a long name needs without this file
+    // having to know anything about the layout.
+    width: 384,
+    height: 320,
     show: false,
     frame: false,
+    // What actually gives the window rounded corners. A `border-radius` on an
+    // opaque window paints a rounded shape onto a square sheet of colour and
+    // the corners stay square — which is exactly how this looked. With the
+    // window transparent, the card's own radius is the outline.
+    transparent: true,
     resizable: false,
     minimizable: false,
     maximizable: false,
@@ -1010,7 +1020,9 @@ function openCallWindow(call: CallRingingInfo) {
     // the same thing said twice.
     center: true,
     alwaysOnTop: true,
-    backgroundColor: "#101014",
+    // Fully transparent, not the app's dark grey: any opaque colour here is
+    // the square that `transparent` exists to remove.
+    backgroundColor: "#00000000",
     title: "Chamada recebida",
     webPreferences: {
       preload: path.join(__dirname, "call-overlay-preload.js"),
@@ -1037,6 +1049,33 @@ function openCallWindow(call: CallRingingInfo) {
     if (callWindow === window) callWindow = null;
   });
   void window.loadFile(path.join(__dirname, "..", "call-overlay.html"));
+}
+
+/**
+ * The GoLive mark, as a data URL for the ringing window's header.
+ *
+ * Read from the same file the tray icon comes from, and memoized: it cannot
+ * change while the app is running, and re-reading a PNG off disk every time a
+ * call arrives is work for nothing.
+ *
+ * Handed over IPC rather than loaded by the window itself, because that window
+ * is a local file under a CSP with no `file:` image source — and it should
+ * stay that way for the sake of one 18-pixel logo.
+ */
+let cachedLogo: string | null | undefined;
+
+function overlayLogo(): string | null {
+  if (cachedLogo !== undefined) return cachedLogo;
+  try {
+    const image = nativeImage.createFromPath(WINDOW_ICON);
+    // Resized before encoding: the source is the full app icon and the header
+    // draws it at 18 points, so shipping the original would be a hundred
+    // kilobytes of base64 across the bridge for no visible difference.
+    cachedLogo = image.isEmpty() ? null : image.resize({ width: 36, height: 36 }).toDataURL();
+  } catch {
+    cachedLogo = null;
+  }
+  return cachedLogo;
 }
 
 /**
@@ -1414,7 +1453,9 @@ if (!gotLock) {
     });
 
     // What the small window is showing. Asked for once, as it opens.
-    ipcMain.handle(IPC.callOverlayData, () => ringingCall);
+    ipcMain.handle(IPC.callOverlayData, (): CallOverlayData | null =>
+      ringingCall ? { call: ringingCall, logo: overlayLogo() } : null
+    );
 
     // And the button that was pressed there, handed straight to the page —
     // which is the only side with a session to act with. The window closes

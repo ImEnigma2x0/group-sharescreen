@@ -167,6 +167,20 @@ export interface CallRingingInfo {
   avatarUrl: string | null;
 }
 
+/**
+ * Everything the ringing window needs to draw itself.
+ *
+ * The logo rides along rather than being loaded from disk by the window
+ * itself: that window is a local file under a strict CSP with no `file:`
+ * image source, and handing it a data URL keeps it that way. Read once by
+ * main from the same icon the tray uses.
+ */
+export interface CallOverlayData {
+  call: CallRingingInfo;
+  /** The GoLive mark as a data URL, or null if the icon could not be read. */
+  logo: string | null;
+}
+
 /** What was pressed in that window. */
 export interface CallOverlayChoice {
   action: "accept" | "decline";

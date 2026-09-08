@@ -3,8 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <!-- Local file with no remote anything, same posture as picker.html. The
-         avatar arrives as an https URL from our own CDN, which is the one
-         exception this needs over the picker's data:-only rule. -->
+         avatar arrives as an https URL from our own CDN, and the GoLive mark
+         as a data: URL handed over IPC (see main.ts's overlayLogo) — which is
+         why this still needs no file: source. -->
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'none'; img-src data: https:; style-src 'unsafe-inline'; script-src 'unsafe-inline';"
@@ -15,60 +16,137 @@
         color-scheme: dark;
         /* Kept in step with the site's dark theme by hand — this page has no
            Tailwind and no way to read app/globals.css. Same values picker.html
-           uses, plus the two the buttons need. */
-        --bg: #101014;
+           uses, plus the ones the two answers need. */
+        --bg: #0f0f13;
         --panel: #1a1a1f;
-        --border: #313139;
+        --border: #2b2b33;
         --text: #fafafa;
         --muted: #a1a1aa;
         --accept: #059669;
         --accept-hover: #10b981;
-        --decline: #3f3f46;
-        --decline-hover: #52525b;
+        --decline: #dc2626;
+        --decline-hover: #ef4444;
       }
+
       * { box-sizing: border-box; }
       [hidden] { display: none !important; }
+
+      /* The window itself is transparent, and that is what actually rounds the
+         corners: a `border-radius` on an opaque window paints a rounded shape
+         onto a square sheet of colour, and the square is what you see at the
+         corners. Here the card is the only thing painted, so its radius *is*
+         the window's outline — and the padding around it is where the shadow
+         gets to land. */
+      html,
       body {
         margin: 0;
-        height: 100vh;
+        height: 100%;
+        background: transparent;
+      }
+      body {
         display: flex;
-        flex-direction: column;
+        align-items: center;
         justify-content: center;
-        gap: 14px;
-        padding: 18px 20px;
-        background: var(--bg);
+        padding: 14px;
         color: var(--text);
         font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
         user-select: none;
-        /* The window is frameless, so this is the only thing giving it an
-           edge against whatever is behind it. */
-        border: 1px solid var(--border);
-        border-radius: 12px;
         overflow: hidden;
       }
 
-      /* The whole window is the drag handle, minus the controls: a frameless
-         window has no title bar to grab, and one that cannot be moved off a
-         full-screen game is one that is in the way. */
-      #who { -webkit-app-region: drag; }
-      button, textarea { -webkit-app-region: no-drag; }
+      #card {
+        width: 100%;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+        overflow: hidden;
+        animation: appear 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+      }
 
+      @keyframes appear {
+        from {
+          opacity: 0;
+          transform: scale(0.94) translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* ── Header ─────────────────────────────────────────────────────────
+         The window has no title bar of its own, so this is both the thing
+         that says where the call is coming from and the only place to grab
+         when it lands on top of something you were reading. */
+      header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(90deg, rgba(5, 150, 105, 0.16), transparent 65%);
+        -webkit-app-region: drag;
+      }
+      #logo {
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+        flex: none;
+      }
+      #brand {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+      #kind {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      /* ── Who ────────────────────────────────────────────────────────────*/
       #who {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 13px;
+        padding: 16px 16px 14px;
         min-width: 0;
       }
-      /* The picture, and what is behind it when there is no picture.
-         Stacked rather than swapped: the initial is always drawn, the image
-         sits on top of it, and an image that is missing or fails to load
-         simply reveals it. No error handler, no second state to keep in
-         step. */
+
+      /* The picture, and what is behind it when there is no picture. Stacked
+         rather than swapped: the initial is always drawn, the image sits on
+         top of it, and an image that is missing or fails to load simply
+         reveals it. No error handler, no second state to keep in step. */
       #face {
         position: relative;
-        width: 48px;
-        height: 48px;
+        width: 54px;
+        height: 54px;
         flex: none;
+      }
+      /* The one thing on screen that says this is ringing *now*. On the avatar
+         rather than on the whole card: a window that pulses as a whole is one
+         that is hard to read and unpleasant to aim at. */
+      #face::after {
+        content: "";
+        position: absolute;
+        inset: -4px;
+        border-radius: 50%;
+        border: 2px solid var(--accept);
+        animation: ring 1.8s ease-out infinite;
+      }
+      @keyframes ring {
+        0% {
+          transform: scale(0.94);
+          opacity: 0.9;
+        }
+        70%,
+        100% {
+          transform: scale(1.14);
+          opacity: 0;
+        }
       }
       #initial {
         position: absolute;
@@ -79,50 +157,42 @@
         border-radius: 50%;
         background: var(--panel);
         color: var(--muted);
-        font-size: 20px;
+        font-size: 22px;
         font-weight: 600;
       }
       #avatar {
         position: absolute;
         inset: 0;
-        width: 48px;
-        height: 48px;
+        width: 54px;
+        height: 54px;
         border-radius: 50%;
         object-fit: cover;
       }
-      #names { min-width: 0; }
+
+      #names {
+        min-width: 0;
+      }
       #name {
         margin: 0;
-        font-size: 15px;
+        font-size: 16px;
         font-weight: 600;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
       #sub {
-        margin: 1px 0 0;
-        font-size: 12px;
+        margin: 2px 0 0;
+        font-size: 12.5px;
         color: var(--muted);
       }
 
-      .row { display: flex; gap: 8px; }
-      .row > button { flex: 1; }
-
-      button {
-        font: inherit;
-        font-weight: 600;
-        color: var(--text);
-        border: 0;
-        border-radius: 9px;
-        padding: 10px 12px;
-        cursor: pointer;
-        transition: background-color 0.12s;
+      /* ── Answering ──────────────────────────────────────────────────────*/
+      #actions {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        padding: 0 16px 16px;
       }
-      button:focus-visible { outline: 2px solid #fafafa; outline-offset: 2px; }
-      #accept { background: var(--accept); }
-      #accept:hover { background: var(--accept-hover); }
-      #decline { background: var(--decline); }
-      #decline:hover { background: var(--decline-hover); }
 
       #reason {
         width: 100%;
@@ -130,41 +200,128 @@
         color: var(--text);
         background: var(--panel);
         border: 1px solid var(--border);
-        border-radius: 9px;
+        border-radius: 10px;
         padding: 8px 10px;
         resize: none;
+        -webkit-app-region: no-drag;
       }
-      #reason:focus { outline: none; border-color: var(--muted); }
-      #reason::placeholder { color: var(--muted); }
+      #reason:focus {
+        outline: none;
+        border-color: var(--muted);
+      }
+      #reason::placeholder {
+        color: var(--muted);
+      }
+
+      .row {
+        display: flex;
+        gap: 9px;
+      }
+      .row > button {
+        flex: 1;
+      }
+
+      button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        font: inherit;
+        font-size: 13.5px;
+        font-weight: 600;
+        color: #fff;
+        border: 0;
+        border-radius: 11px;
+        padding: 11px 12px;
+        cursor: pointer;
+        transition: background-color 0.12s, transform 0.08s;
+        -webkit-app-region: no-drag;
+      }
+      button:active {
+        transform: translateY(1px);
+      }
+      button:focus-visible {
+        outline: 2px solid #fafafa;
+        outline-offset: 2px;
+      }
+      button svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+        flex: none;
+      }
+
+      #accept {
+        background: var(--accept);
+      }
+      #accept:hover {
+        background: var(--accept-hover);
+      }
+      #decline {
+        background: var(--decline);
+      }
+      #decline:hover {
+        background: var(--decline-hover);
+      }
 
       @media (prefers-reduced-motion: reduce) {
-        * { transition: none !important; }
+        * {
+          transition: none !important;
+          animation: none !important;
+        }
       }
     </style>
   </head>
   <body>
-    <div id="who">
-      <span id="face">
-        <span id="initial"></span>
-        <img id="avatar" alt="" />
-      </span>
-      <div id="names">
-        <p id="name">Chamada recebida</p>
-        <p id="sub">está te ligando…</p>
+    <div id="card">
+      <header>
+        <img id="logo" alt="" />
+        <span id="brand">GoLive</span>
+        <span id="kind">Chamada</span>
+      </header>
+
+      <div id="who">
+        <span id="face">
+          <span id="initial"></span>
+          <img id="avatar" alt="" />
+        </span>
+        <div id="names">
+          <p id="name">Chamada recebida</p>
+          <p id="sub">está te ligando…</p>
+        </div>
       </div>
-    </div>
 
-    <textarea
-      id="reason"
-      rows="2"
-      maxlength="500"
-      placeholder="Motivo da recusa (opcional)"
-      aria-label="Motivo da recusa (opcional)"
-    ></textarea>
+      <div id="actions">
+        <textarea
+          id="reason"
+          rows="2"
+          maxlength="500"
+          placeholder="Motivo da recusa (opcional)"
+          aria-label="Motivo da recusa (opcional)"
+        ></textarea>
 
-    <div class="row" id="buttons">
-      <button id="decline" type="button">Recusar</button>
-      <button id="accept" type="button">Atender</button>
+        <div class="row">
+          <button id="decline" type="button">
+            <!-- Material's call_end and call — the same two the app's own
+                 ringing screen draws (react-icons' MdCallEnd / MdCall), so the
+                 two windows do not disagree about what a phone looks like. -->
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"
+              />
+            </svg>
+            Recusar
+          </button>
+          <button id="accept" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"
+              />
+            </svg>
+            Atender
+          </button>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -208,8 +365,9 @@
         if (event.key === "Escape") choose("decline", reasonInput.value.trim());
       });
 
-      overlay.data().then((call) => {
-        if (!call) return;
+      overlay.data().then((data) => {
+        if (!data) return;
+        const { call, logo } = data;
         document.getElementById("name").textContent = call.name;
         // Codepoint-aware, like the site's own UserAvatar: [...name][0] keeps
         // an emoji or an accented letter whole where name[0] would cut it in
@@ -219,6 +377,9 @@
         const avatar = document.getElementById("avatar");
         if (call.avatarUrl) avatar.src = call.avatarUrl;
         else avatar.hidden = true;
+        const mark = document.getElementById("logo");
+        if (logo) mark.src = logo;
+        else mark.hidden = true;
       });
     </script>
   </body>

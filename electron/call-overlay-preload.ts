@@ -11,10 +11,10 @@
 // sign-in state, and a bug in this window cannot answer a call by itself.
 
 import { contextBridge, ipcRenderer } from "electron";
-import { IPC, type CallOverlayChoice, type CallRingingInfo } from "./channels";
+import { IPC, type CallOverlayChoice, type CallOverlayData } from "./channels";
 
 contextBridge.exposeInMainWorld("callOverlay", {
-  data(): Promise<CallRingingInfo | null> {
+  data(): Promise<CallOverlayData | null> {
     return ipcRenderer.invoke(IPC.callOverlayData);
   },
   choose(choice: CallOverlayChoice): void {
