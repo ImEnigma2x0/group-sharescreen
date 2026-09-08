@@ -114,6 +114,15 @@ export const IPC = {
   callRinging: "golive:call:ringing",
   /** overlay -> main: what to show. Asked for once, as the window opens. */
   callOverlayData: "golive:call:overlay-data",
+  /**
+   * main -> overlay: show somebody else instead.
+   *
+   * The window is opened once and reused, so without this a second caller
+   * arriving while the first is still ringing left the window showing the
+   * first person's name over buttons that answered the second one's call —
+   * answering the wrong person, silently.
+   */
+  callOverlayUpdate: "golive:call:overlay-update",
   /** overlay -> main: the button that was pressed, and any typed reason. */
   callOverlayChoose: "golive:call:overlay-choose",
   /**

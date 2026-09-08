@@ -17,6 +17,20 @@ contextBridge.exposeInMainWorld("callOverlay", {
   data(): Promise<CallOverlayData | null> {
     return ipcRenderer.invoke(IPC.callOverlayData);
   },
+  /**
+   * Subscribes to "it is somebody else now". Returns an unsubscribe function,
+   * like the main preload's own listeners.
+   */
+  onUpdate(callback: (data: CallOverlayData) => void): () => void {
+    const listener = (_event: unknown, data: unknown) => {
+      if (data && typeof data === "object") callback(data as CallOverlayData);
+    };
+    ipcRenderer.on(IPC.callOverlayUpdate, listener);
+    return () => {
+      ipcRenderer.off(IPC.callOverlayUpdate, listener);
+    };
+  },
+
   choose(choice: CallOverlayChoice): void {
     // Rebuilt rather than forwarded, so what crosses the boundary is the two
     // fields this contract has and nothing the page happened to attach.

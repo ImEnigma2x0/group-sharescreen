@@ -365,9 +365,24 @@
         if (event.key === "Escape") choose("decline", reasonInput.value.trim());
       });
 
-      overlay.data().then((data) => {
+      // Which call the buttons currently answer. Compared on every update so
+      // the window can tell "the same ring, said again" from "somebody else is
+      // calling now" — only the second is worth resetting anything for.
+      let shownId = null;
+
+      function render(data) {
         if (!data) return;
         const { call, logo } = data;
+        if (call.id === shownId) return;
+        // A different person: the latch has to come off, or the window would
+        // sit there refusing to answer anybody after the first press. And the
+        // typed reason goes with it — a sentence written for one person must
+        // not be sent to another.
+        if (shownId !== null) {
+          settled = false;
+          reasonInput.value = "";
+        }
+        shownId = call.id;
         document.getElementById("name").textContent = call.name;
         // Codepoint-aware, like the site's own UserAvatar: [...name][0] keeps
         // an emoji or an accented letter whole where name[0] would cut it in
@@ -375,12 +390,18 @@
         document.getElementById("initial").textContent =
           [...call.name][0]?.toUpperCase() ?? "?";
         const avatar = document.getElementById("avatar");
-        if (call.avatarUrl) avatar.src = call.avatarUrl;
-        else avatar.hidden = true;
+        // Both branches assigned, not just the hiding one: this runs again for
+        // a second caller, and a one-way `hidden = true` would leave the first
+        // person's missing picture hiding the second person's real one.
+        avatar.hidden = !call.avatarUrl;
+        avatar.src = call.avatarUrl || "";
         const mark = document.getElementById("logo");
         if (logo) mark.src = logo;
         else mark.hidden = true;
-      });
+      }
+
+      overlay.data().then(render);
+      overlay.onUpdate(render);
     </script>
   </body>
 </html>

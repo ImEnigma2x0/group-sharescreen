@@ -1136,6 +1136,14 @@ function setCallRinging(call: CallRingingInfo | null) {
     mainWindow.flashFrame(true);
     return;
   }
+
+  // Already ringing about somebody else. The window is opened once and reused,
+  // and it reads who it is showing exactly once — so this is what keeps a
+  // second caller from being answered under the first one's name.
+  if (callWindow && !callWindow.isDestroyed()) {
+    callWindow.webContents.send(IPC.callOverlayUpdate, { call, logo: overlayLogo() });
+    return;
+  }
   openCallWindow(call);
 }
 

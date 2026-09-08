@@ -64,13 +64,20 @@ export function CallHost() {
   const { account } = useAuth();
   const router = useRouter();
   const {
-    incomingCall,
+    incomingCalls,
     outgoingCall,
     callAccepted,
     callAcceptedSeq,
     callEnded,
     callEndedSeq,
   } = useSignaling();
+  // The one on screen, and how many are behind it. Only the front is
+  // answerable: two "atender" buttons under a ringtone is a choice nobody
+  // makes correctly, and the queue is oldest-first precisely so this never
+  // changes under a hand already reaching for it (see SignalingState).
+  const incomingCall = incomingCalls[0] ?? null;
+  const waiting = Math.max(0, incomingCalls.length - 1);
+
   const [busy, setBusy] = useState(false);
   // The refusal being typed, and which call it belongs to.
   //
@@ -167,7 +174,7 @@ export function CallHost() {
     void (async () => {
       const pending = await fetchPendingCalls(controller.signal);
       if (!pending) return;
-      signalingClient.adoptCalls(pending.incoming[0] ?? null, pending.outgoing[0] ?? null);
+      signalingClient.adoptCalls(pending.incoming, pending.outgoing[0] ?? null);
     })();
     return () => controller.abort();
   }, [account]);
@@ -181,7 +188,7 @@ export function CallHost() {
       if (document.visibilityState !== "visible") return;
       void fetchPendingCalls().then((pending) => {
         if (!pending) return;
-        signalingClient.adoptCalls(pending.incoming[0] ?? null, pending.outgoing[0] ?? null);
+        signalingClient.adoptCalls(pending.incoming, pending.outgoing[0] ?? null);
       });
     };
     document.addEventListener("visibilitychange", onVisible);
@@ -237,24 +244,30 @@ export function CallHost() {
   // online (see the API's isAccountDeviceOnline), so this is the alert that
   // stands in for it. showNotification stays quiet when the page is focused,
   // which is exactly when the screen below is already on top of everything.
-  const announcedRef = useRef<string | null>(null);
+  const announcedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!incomingCall) return;
-    if (announcedRef.current === incomingCall.id) return;
-    announcedRef.current = incomingCall.id;
-    void showNotification({
-      title: `${incomingCall.from.displayName} está te ligando`,
-      body: "Toque para atender.",
-      tag: CALL_NOTIFICATION_TAG,
-      icon: incomingCall.from.avatarUrl ?? undefined,
-      requireInteraction: true,
-      // A ring is the one alert in this app that outranks the local mute: a
-      // person who silenced chat notifications did not thereby say they never
-      // want to know somebody is calling them.
-      ignoreMutePreference: true,
-      onClick: () => window.focus(),
-    });
-  }, [incomingCall]);
+    for (const call of incomingCalls) {
+      // Every call, not only the one on screen: somebody ringing behind a call
+      // already showing is exactly the person who would otherwise go
+      // unannounced, and they are the reason the queue exists.
+      if (announcedRef.current.has(call.id)) continue;
+      announcedRef.current.add(call.id);
+      void showNotification({
+        title: `${call.from.displayName} está te ligando`,
+        body: "Toque para atender.",
+        // Per call, so a second caller does not silently replace the first
+        // one's notification the way a shared tag would.
+        tag: `${CALL_NOTIFICATION_TAG}:${call.id}`,
+        icon: call.from.avatarUrl ?? undefined,
+        requireInteraction: true,
+        // A ring is the one alert in this app that outranks the local mute: a
+        // person who silenced chat notifications did not thereby say they never
+        // want to know somebody is calling them.
+        ignoreMutePreference: true,
+        onClick: () => window.focus(),
+      });
+    }
+  }, [incomingCalls]);
 
   // ─── Walking into the room ──────────────────────────────────────────────
   //
@@ -440,6 +453,17 @@ export function CallHost() {
               <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">
                 {isIncoming ? "está te ligando…" : "chamando…"}
               </p>
+              {/* Only ever shown while somebody really is waiting behind this
+                  one. Not a control: the call in front has to be answered or
+                  refused first, and offering a way to skip the queue would be
+                  offering a way to answer the wrong person. */}
+              {waiting > 0 && (
+                <p className="mt-1 text-xs font-medium text-amber-600 dark:text-amber-500">
+                  {waiting === 1
+                    ? "+1 chamada esperando"
+                    : `+${waiting} chamadas esperando`}
+                </p>
+              )}
             </div>
           </div>
 

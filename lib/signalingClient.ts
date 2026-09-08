@@ -317,6 +317,20 @@ export type DirectMessageWire = {
 /** How many delivered messages the buffer above keeps. */
 const RECENT_DM_LIMIT = 100;
 
+/**
+ * The same list without one call, or the same array when it was not in it.
+ *
+ * Returning the identical array matters: this state is read through
+ * useSyncExternalStore, which compares snapshots by identity, and a fresh
+ * array on every unrelated "call-ended" would re-render every screen holding
+ * one for nothing.
+ */
+function withoutCall(calls: CallWire[], callId: string): CallWire[] {
+  return calls.some((call) => call.id === callId)
+    ? calls.filter((call) => call.id !== callId)
+    : calls;
+}
+
 /** One of the two people on a call, as the ring carries them. */
 export type CallUserWire = {
   id: string;
@@ -459,15 +473,24 @@ export type SignalingState = {
   // Bumped when this account marks a conversation read somewhere else, so a
   // badge cleared on one device stops nagging on the others.
   dmReadSeq: number;
-  // The call ringing *at* this account right now, or null.
+  // Every call ringing *at* this account, oldest first.
   //
-  // At most one, deliberately: a second ring while one is already on screen
-  // replaces it rather than stacking, because two "atender" buttons is a
-  // choice nobody makes correctly under a ringtone. The API refuses to open a
-  // second call between the same two people anyway (see callBetween), so this
-  // only collapses genuinely different callers, and the one that is dropped
-  // is still answerable from the missed-call notification.
-  incomingCall: CallWire | null;
+  // A list, and it used to be a single slot that each new ring overwrote. Two
+  // people calling at once is rare and entirely possible, and overwriting lost
+  // the first one outright: it went on ringing server-side with nothing on
+  // screen for it, and its caller was eventually told "ninguém atendeu" by
+  // somebody who was sitting right there.
+  //
+  // Only the first is shown (see CallHost) — two "atender" buttons under a
+  // ringtone is a choice nobody makes correctly — but the rest are kept, and
+  // the next one takes the screen as soon as the one in front of it is dealt
+  // with.
+  //
+  // Oldest first, deliberately. Newest-first would mean the face and the
+  // buttons changing under a hand already reaching for "atender", which is the
+  // same accident as answering the wrong person. The one on screen only ever
+  // changes when it is resolved.
+  incomingCalls: CallWire[];
   // The call this account is placing, or null. Present on *every* device of
   // the caller, not only the one that pressed the button — hanging up from
   // the phone in your pocket has to work.
@@ -645,7 +668,7 @@ const initialState: SignalingState = {
   dmSeq: 0,
   recentDms: [],
   dmReadSeq: 0,
-  incomingCall: null,
+  incomingCalls: [],
   outgoingCall: null,
   callAccepted: null,
   callAcceptedSeq: 0,
@@ -1688,10 +1711,16 @@ class SignalingClient {
       // to machine: a call is ringing or it is not, and the moment it stops
       // ringing this client's job is either to open a room or to say why not.
       // Everything after "call-accepted" is the room's, not this file's.
-      case "call-incoming":
+      case "call-incoming": {
         if (!msg.call) break;
-        this.setState({ incomingCall: msg.call as CallWire });
+        const call = msg.call as CallWire;
+        // Appended, and only if new: the same call can legitimately arrive
+        // twice (a reconnect that re-reads what is pending, two tabs of one
+        // browser), and a duplicate would be a second row for one ring.
+        if (this.state.incomingCalls.some((existing) => existing.id === call.id)) break;
+        this.setState({ incomingCalls: [...this.state.incomingCalls, call] });
         break;
+      }
       case "call-outgoing":
         if (!msg.call) break;
         this.setState({ outgoingCall: msg.call as CallWire });
@@ -1705,7 +1734,7 @@ class SignalingClient {
           // ringing UI has to come down the instant the call is answered,
           // including on the *other* devices of both people, which never
           // navigate anywhere and would otherwise ring forever.
-          incomingCall: this.state.incomingCall?.id === callId ? null : this.state.incomingCall,
+          incomingCalls: withoutCall(this.state.incomingCalls, callId),
           outgoingCall: this.state.outgoingCall?.id === callId ? null : this.state.outgoingCall,
           callAccepted: { callId, roomHandle },
           callAcceptedSeq: this.state.callAcceptedSeq + 1,
@@ -1722,7 +1751,7 @@ class SignalingClient {
         const note =
           typeof msg.note === "string" && msg.note.trim() ? msg.note.trim().slice(0, 500) : undefined;
         this.setState({
-          incomingCall: this.state.incomingCall?.id === callId ? null : this.state.incomingCall,
+          incomingCalls: withoutCall(this.state.incomingCalls, callId),
           outgoingCall: this.state.outgoingCall?.id === callId ? null : this.state.outgoingCall,
           callEnded: {
             callId,
@@ -1941,12 +1970,23 @@ class SignalingClient {
    * message that was sent while nothing was listening. Everything after this
    * point is the ordinary live path.
    */
-  adoptCalls(incoming: CallWire | null, outgoing: CallWire | null) {
-    // Never downgrades: a live "call-incoming" that arrived while the HTTP
-    // read was in flight is newer than what that read returned, and letting a
-    // stale empty answer overwrite it would silence a call that is ringing.
+  adoptCalls(incoming: CallWire[], outgoing: CallWire | null) {
+    // A union rather than a replacement, because the two sources race: a
+    // "call-incoming" that arrived while this read was in flight is newer than
+    // the read, and taking the answer literally would silence a call that is
+    // ringing right now.
+    //
+    // What stops that union from accumulating ghosts is the expiry: anything
+    // the server did not mention is kept only while its own deadline says it
+    // could still be ringing, so a missed "call-ended" costs at most the rest
+    // of that call's 45 seconds.
+    const now = Date.now();
+    const known = new Set(incoming.map((call) => call.id));
+    const survivors = this.state.incomingCalls.filter(
+      (call) => !known.has(call.id) && call.expiresAt > now
+    );
     this.setState({
-      incomingCall: incoming ?? this.state.incomingCall,
+      incomingCalls: [...incoming, ...survivors],
       outgoingCall: outgoing ?? this.state.outgoingCall,
     });
   }
@@ -1961,7 +2001,7 @@ class SignalingClient {
    */
   clearCall(callId: string) {
     this.setState({
-      incomingCall: this.state.incomingCall?.id === callId ? null : this.state.incomingCall,
+      incomingCalls: withoutCall(this.state.incomingCalls, callId),
       outgoingCall: this.state.outgoingCall?.id === callId ? null : this.state.outgoingCall,
     });
   }
