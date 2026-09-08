@@ -13,6 +13,7 @@ import { LoginForm } from "@/components/LoginForm";
 import { CompleteOAuthSignupForm } from "@/components/CompleteOAuthSignupForm";
 import Link from "next/link";
 import { AccountConnections } from "@/components/AccountConnections";
+import { ThemeSegmented } from "@/components/ThemeToggle";
 import { openDirectMessages } from "@/lib/dmWindow";
 import type { OAuthResult } from "@/lib/oauthApi";
 
@@ -202,10 +203,9 @@ export function AccountMenu() {
                   </Link>
                 )}
                 {/* Brings its own collapsible section, so it sits in the
-                    panel as one row until someone opens it. */}
-                <div className="px-1 pb-1">
-                  <AccountConnections />
-                </div>
+                    panel as one row until someone opens it — and it carries
+                    the row's own padding, so no wrapper here. */}
+                <AccountConnections />
                 <button type="button" onClick={() => { logout(); close(); }} className={itemClass}>
                   Sair da conta
                 </button>
@@ -230,6 +230,16 @@ export function AccountMenu() {
                 </button>
               </>
             )}
+          </div>
+          {/* The theme, for accounts and guests alike: it is a setting about
+              this browser, not about who is signed in. Moved here out of the
+              site header, where a permanent button spent a slot in the bar on
+              a choice people make once. */}
+          <div className="mt-1 border-t border-black/5 px-3 pt-2 pb-1 dark:border-white/5">
+            <p className="mb-1.5 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+              Tema
+            </p>
+            <ThemeSegmented />
           </div>
         </>
       )}

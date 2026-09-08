@@ -7,7 +7,6 @@ import { MdMonitor, MdOutlineMap } from "react-icons/md";
 import { GlobeIcon, VerifiedBadgeIcon } from "@/components/icons";
 import { AccountMenu } from "@/components/AccountMenu";
 import { NotificationInboxBell } from "@/components/NotificationInboxBell";
-import { ThemeMenuButton } from "@/components/ThemeToggle";
 import { UpdateAppButton } from "@/components/UpdateAppButton";
 
 // The site's top bar: everything GoLive offers besides the room form itself,
@@ -142,14 +141,14 @@ export function SiteHeader() {
               </Link>
             );
           })}
-          {/* Claro / escuro / sistema. Right of the links and left of the
-              account, because it is a setting about the site rather than
-              another place in it. */}
-          {/* Left of the theme and the account, which are both settings about
-              you; this is the one control in the row that has something to
-              *tell* you. */}
+          {/* Left of the account, which is the other control in the row about
+              you; this is the one with something to *tell* you.
+
+              The theme picker used to sit here too and now lives inside the
+              account menu (see AccountMenu): it is a setting somebody changes
+              once, and a permanent button in the bar spent header room on a
+              decision nobody revisits. */}
           <NotificationInboxBell />
-          <ThemeMenuButton />
           {/* Renders nothing until there is a name to show, so the bar looks
               the same on a first visit as it always did. */}
           <AccountMenu />

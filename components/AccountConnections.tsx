@@ -104,10 +104,14 @@ export function AccountConnections() {
 
   if (!open) {
     return (
+      // Shaped as one of the account menu's rows, which is this component's
+      // only home. It used to be a blue underlined link, which read as a
+      // stray piece of prose dropped into a list of controls — the one row
+      // that looked like it belonged to another screen.
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="self-start text-sm font-medium text-blue-600 underline underline-offset-2 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
       >
         {/* Spelled out while there's nothing linked: this is the only hint
             someone with an old username/password account gets that they can
@@ -118,7 +122,9 @@ export function AccountConnections() {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    // Same horizontal padding as the collapsed row above, so opening the
+    // section does not shift its contents sideways.
+    <div className="flex flex-col gap-2 px-3 py-2">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Conexões</h3>
         <button
