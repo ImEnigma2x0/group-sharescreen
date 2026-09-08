@@ -129,7 +129,7 @@ export function HomeFriendsPanel({ className = "" }: { className?: string }) {
 
   return (
     <aside
-      className={`w-full max-w-md rounded-2xl border border-black/10 bg-white p-5 shadow-sm lg:w-72 dark:border-white/10 dark:bg-zinc-950 ${className}`}
+      className={`w-full max-w-md rounded-2xl border border-black/10 bg-white p-5 shadow-sm lg:w-88 dark:border-white/10 dark:bg-zinc-950 ${className}`}
     >
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
