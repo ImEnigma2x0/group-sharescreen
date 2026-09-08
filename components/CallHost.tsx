@@ -88,29 +88,54 @@ export function CallHost() {
      * recent thing that happened.
      */
     selfEnded: string | null;
-  }>({ endedSeq: 0, acceptedSeq: 0, text: null, selfEnded: null });
+    /**
+     * A refusal that came with an explanation, kept until it is dismissed.
+     *
+     * Its own field rather than a longer `text`, because it has a different
+     * lifetime and a different shape. The sentence above is a remark that
+     * takes itself down after four seconds; this is something another person
+     * wrote *to you*, and taking it off the screen before it has been read —
+     * or truncating it into a toast — is losing it.
+     */
+    declined: { name: string; avatarUrl: string | null; note: string } | null;
+  }>({ endedSeq: 0, acceptedSeq: 0, text: null, selfEnded: null, declined: null });
 
   if (notice.endedSeq !== callEndedSeq || notice.acceptedSeq !== callAcceptedSeq) {
+    // "call-ended" goes to both people, so the one who pressed "recusar" would
+    // otherwise be told "Chamada recusada." about their own press. Both of the
+    // screens below exist for the *other* end, which has no idea why the
+    // ringing stopped.
+    const mine = Boolean(callEnded && callEnded.callId === notice.selfEnded);
+    // A call that was answered leaves nothing to say — both people are on their
+    // way into the room — and it also clears whatever the previous call left
+    // behind, so "chamada recusada" does not follow somebody into a call that
+    // is starting perfectly well.
+    const answered = notice.acceptedSeq !== callAcceptedSeq;
+    // A refusal somebody bothered to explain is the one outcome that gets a
+    // screen of its own: it is a message, and a message deserves better than
+    // four seconds in a corner.
+    const explained =
+      !mine && !answered && callEnded?.reason === "declined" && callEnded.note
+        ? {
+            name: callEnded.by?.displayName ?? "Alguém",
+            avatarUrl: callEnded.by?.avatarUrl ?? null,
+            note: callEnded.note,
+          }
+        : null;
+
     setNotice({
       endedSeq: callEndedSeq,
       acceptedSeq: callAcceptedSeq,
-      // "call-ended" goes to both people, so the one who pressed "recusar"
-      // was being told "Chamada recusada." about their own press. Suppressed
-      // by remembering what this device ended itself — the sentence exists
-      // for the *other* end, which has no idea why the ringing stopped.
-      // A call that was *answered* leaves nothing to say — both people are on
-      // their way into the room — and it must also clear whatever the
-      // previous call left behind, or "chamada recusada" follows somebody
-      // into a call that is starting perfectly well.
-      text:
-        notice.acceptedSeq !== callAcceptedSeq ||
-        (callEnded && callEnded.callId === notice.selfEnded)
-          ? null
-          : noticeFor(callEnded?.reason ?? null),
+      text: mine || answered || explained ? null : noticeFor(callEnded?.reason ?? null),
       selfEnded: notice.selfEnded,
+      // Kept across an unrelated event so a "ninguém atendeu" from the next
+      // call does not wipe a refusal still sitting unread. Answering a call is
+      // the one thing that does clear it: you are walking into a room.
+      declined: explained ?? (answered ? null : notice.declined),
     });
   }
   const noticeText = notice.text;
+  const declined = notice.declined;
 
   // ─── Cold start ─────────────────────────────────────────────────────────
   //
@@ -298,7 +323,7 @@ export function CallHost() {
   // Incoming wins over outgoing when somehow both exist: being asked something
   // outranks waiting for an answer.
   const call = incomingCall ?? outgoingCall;
-  if (!call && !noticeText) return null;
+  if (!call && !noticeText && !declined) return null;
 
   const isIncoming = incomingCall !== null;
   // Narrowed rather than asserted. The guard above lets `call` through as null
@@ -325,7 +350,11 @@ export function CallHost() {
       role="alert"
       aria-live="assertive"
     >
-      {isIncoming && (
+      {/* A backdrop for the two things that are asking something of you: a
+          ring waiting to be answered, and a message waiting to be read.
+          Never for "chamando…", where freezing the app would punish somebody
+          for the crime of calling. */}
+      {(isIncoming || (!call && declined)) && (
         <div
           aria-hidden
           className="pointer-events-auto absolute inset-0 bg-black/50 backdrop-blur-[2px]"
@@ -418,6 +447,43 @@ export function CallHost() {
                 Cancelar
               </button>
             )}
+          </div>
+        </div>
+      ) : declined ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${declined.name} recusou sua chamada`}
+          className="pointer-events-auto relative w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900"
+        >
+          <div className="flex flex-col items-center gap-3 px-6 pb-4 pt-7 text-center">
+            <UserAvatar src={declined.avatarUrl} name={declined.name} size={64} />
+            <div className="w-full min-w-0">
+              <p className="truncate text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                {declined.name}
+              </p>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">recusou sua chamada</p>
+            </div>
+          </div>
+
+          {/* The sentence itself, quoted rather than run into the line above:
+              it is the other person's words and not the app's. `whitespace-
+              pre-wrap` keeps the line breaks they typed, and the scroll cap
+              keeps five hundred characters from pushing the button off a
+              phone screen. */}
+          <p className="mx-6 max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-xl bg-zinc-100 px-4 py-3 text-sm text-zinc-800 dark:bg-zinc-800/70 dark:text-zinc-100">
+            {declined.note}
+          </p>
+
+          <div className="p-3">
+            <button
+              type="button"
+              autoFocus
+              onClick={() => setNotice((current) => ({ ...current, declined: null }))}
+              className="w-full rounded-xl bg-zinc-900 px-4 py-2.5 font-medium text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            >
+              Entendi
+            </button>
           </div>
         </div>
       ) : (

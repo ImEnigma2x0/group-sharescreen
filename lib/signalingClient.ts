@@ -482,7 +482,13 @@ export type SignalingState = {
   // "declined" and "timeout" say different things to the person who called,
   // and the same reason arriving twice has to be distinguishable from the
   // first one still sitting there.
-  callEnded: { callId: string; reason: string; note?: string } | null;
+  callEnded: {
+    callId: string;
+    reason: string;
+    note?: string;
+    /** Who refused or gave up. Absent for a call that simply rang out. */
+    by?: CallUserWire;
+  } | null;
   callEndedSeq: number;
   // "Apoiar projeto" hover list (see SupportersTooltip.tsx) — same
   // fetch-over-HTTP-then-live-update shape as partner above, minus the
@@ -1714,7 +1720,12 @@ class SignalingClient {
         this.setState({
           incomingCall: this.state.incomingCall?.id === callId ? null : this.state.incomingCall,
           outgoingCall: this.state.outgoingCall?.id === callId ? null : this.state.outgoingCall,
-          callEnded: { callId, reason, ...(note ? { note } : {}) },
+          callEnded: {
+            callId,
+            reason,
+            ...(note ? { note } : {}),
+            ...(msg.by ? { by: msg.by as CallUserWire } : {}),
+          },
           callEndedSeq: this.state.callEndedSeq + 1,
         });
         break;
