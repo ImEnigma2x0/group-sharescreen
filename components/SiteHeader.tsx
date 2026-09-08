@@ -72,8 +72,8 @@ export function SiteHeader() {
           className="flex shrink-0 items-center gap-2 transition hover:opacity-80"
           aria-label="Início do GoLive"
         >
-          {/* The same red square that app/opengraph-image.tsx draws and every
-              Discord embed of the site shows — the mark people already
+          {/* The same red square every Discord embed of the site shows (see
+              the openGraph image in app/layout.tsx) — the mark people already
               associate with GoLive, rather than a second one invented here. */}
           <img src="/icon.png" alt="site icon" style={{ width: "20px" }} />
           <span className="hidden text-base font-semibold tracking-tight text-zinc-950 sm:inline dark:text-zinc-50">

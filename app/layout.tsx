@@ -91,7 +91,12 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     images: [
       {
-        url: "/opengraph-image",
+        // A static file under public/, not the generated route that used to
+        // live at app/opengraph-image.tsx. That file was deleted along with
+        // this change: Next's file convention emits its own og:image for the
+        // root segment, so leaving it would have put two images on every
+        // shared link and let the crawler pick.
+        url: "/assets/oembed/image.png",
         width: 1200,
         height: 630,
         alt: "GoLive — transmissão de tela em grupo online",
@@ -102,7 +107,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: TITLE,
     description: DESCRIPTION,
-    images: ["/opengraph-image"],
+    images: ["/assets/oembed/image.png"],
   },
   icons: {
     icon: "/icon.png",
