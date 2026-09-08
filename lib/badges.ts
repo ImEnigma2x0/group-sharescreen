@@ -194,7 +194,7 @@ export function markMobileBeta(userId: string) {
   if (typeof window === "undefined" || !userId) return;
   try {
     localStorage.setItem(`golive_mobile_beta_${userId}`, "true");
-  } catch {}
+  } catch { }
 }
 
 function userHasBadge(
@@ -222,51 +222,9 @@ function userHasBadge(
     }
   }
 
-  // Staff badge
-  if (badge.id === "staff" || badge.requiredFlag === "STAFF" || badge.flagTag === "STAFF") {
-    return flags.includes("STAFF") || flags.includes("ADMIN") || flags.includes("ADMIN_MASTER");
-  }
-
   // Pro badge
   if (badge.id === "pro") {
     return isPro;
-  }
-
-  // Bug Hunter badge
-  if (badge.id === "bug_hunter" || badge.requiredFlag === "BUG_HUNTER" || badge.flagTag === "BUG_HUNTER") {
-    return flags.includes("BUG_HUNTER");
-  }
-
-  // Contributor badge
-  if (
-    badge.id === "contributor" ||
-    badge.requiredFlag === "CONTRIBUITOR" ||
-    badge.flagTag === "CONTRIBUITOR" ||
-    badge.flagTag === "CONTRIBUTOR"
-  ) {
-    return flags.includes("CONTRIBUITOR") || flags.includes("CONTRIBUTOR");
-  }
-
-  // Mobile Beta badge
-  if (badge.id === "beta_mobile" || badge.requiredFlag === "BETA_MOBILE" || badge.flagTag === "BETA_MOBILE") {
-    const isMobile =
-      flags.includes("BETA_MOBILE") ||
-      (Boolean(isOwner) && isMobileApp()) ||
-      (account.id ? isMobileBetaCached(account.id) : false);
-
-    if (isMobile && isOwner && account.id && isMobileApp()) {
-      markMobileBeta(account.id);
-    }
-    return isMobile;
-  }
-
-  // Beta Tester badge
-  if (badge.id === "beta_tester" || badge.requiredFlag === "BETA_TESTER" || badge.flagTag === "BETA_TESTER") {
-    const isEarlyAccount =
-      typeof account.createdAt === "number" &&
-      account.createdAt > 0 &&
-      account.createdAt < BETA_TESTER_CUTOFF_MS;
-    return flags.includes("BETA_TESTER") || isEarlyAccount;
   }
 
   // General flag-based badge created via database
