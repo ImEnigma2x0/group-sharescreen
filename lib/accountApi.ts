@@ -35,6 +35,8 @@ export type Account = {
    * rather than deleted, same as the avatar and the banner.
    */
   profileTheme?: { from: string; to: string; angle: number } | null;
+  /** The YouTube song on this profile, stored as its id. Same gate. */
+  profileSong?: { videoId: string; title: string } | null;
   // Cumulative seconds, tracked automatically by the signaling server —
   // never hand-edited. Absent on an older API response, same "reads as 0"
   // fallback as points.
@@ -343,6 +345,8 @@ export type UpdateProfileInput = {
   banner?: string | null;
   /** Null clears the gradient; absent leaves it alone. */
   profileTheme?: { from: string; to: string; angle: number } | null;
+  /** A YouTube link. Null or "" clears it; absent leaves it alone. */
+  song?: string | null;
   equippedProfileColor?: string | null;
 };
 

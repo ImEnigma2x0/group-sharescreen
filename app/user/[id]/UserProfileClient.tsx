@@ -20,7 +20,9 @@ export function UserProfileClient({ id }: { id: string }) {
           ← Voltar para o GoLive
         </Link>
         <div className="mt-4">
-          <UserProfileCard id={id} />
+          {/* Autoplay only here: this page is somebody opening a profile on
+              purpose. The room's popup passes nothing and gets a play button. */}
+          <UserProfileCard id={id} autoPlaySong />
         </div>
         <AdsterraNative className="mt-8" />
       </main>

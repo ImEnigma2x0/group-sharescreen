@@ -13,6 +13,7 @@ import { signalingClient } from "@/lib/signalingClient";
 import { getAccountToken, fetchAvatarOptions, type AvatarOptions } from "@/lib/accountApi";
 import { hasFeature } from "@/lib/entitlements";
 import { planIcon } from "@/components/planIcons";
+import { ProfileSongPlayer } from "@/components/ProfileSongPlayer";
 import {
   profileThemeStyle,
   GRADIENT_DIRECTIONS,
@@ -93,6 +94,11 @@ function planRowClass(locked: boolean, extra: string): string {
   // Without the ring there is nothing for the padding to sit inside, and a
   // padded row with no border reads as a stray indent.
   return `${extra} ${locked ? "relative rounded-xl p-2.5" : ""}`;
+}
+
+/** The link to put back in the field for a song already saved. */
+function songLinkOf(song: { videoId: string } | null | undefined): string {
+  return song ? `https://www.youtube.com/watch?v=${song.videoId}` : "";
 }
 
 function PlanSection({
@@ -287,9 +293,16 @@ function AvatarRow({
 export function UserProfileCard({
   id,
   onNavigate,
+  autoPlaySong = false,
 }: {
   id: string;
   onNavigate?: () => void;
+  /**
+   * Whether the profile song starts on its own. True only from the /user page
+   * — in the room's popup somebody is checking who a name belongs to, and
+   * music starting over a call they are in is not what they asked for.
+   */
+  autoPlaySong?: boolean;
 }) {
   const [profile, setProfile] = useState<UserProfile | null | undefined>(undefined);
 
@@ -321,7 +334,14 @@ export function UserProfileCard({
       </div>
     );
   }
-  return <ProfileContent profile={profile} onNavigate={onNavigate} onProfileUpdated={setProfile} />;
+  return (
+    <ProfileContent
+      profile={profile}
+      onNavigate={onNavigate}
+      onProfileUpdated={setProfile}
+      autoPlaySong={autoPlaySong}
+    />
+  );
 }
 
 // The profile's own shape while it is still arriving.
@@ -385,10 +405,17 @@ function ProfileContent({
   profile,
   onNavigate,
   onProfileUpdated,
+  autoPlaySong = false,
 }: {
   profile: UserProfile;
   onNavigate?: () => void;
   onProfileUpdated?: (updated: UserProfile) => void;
+  /**
+   * Whether the profile song starts on its own. True only from the /user page
+   * — in the room's popup somebody is checking who a name belongs to, and
+   * music starting over a call they are in is not what they asked for.
+   */
+  autoPlaySong?: boolean;
 }) {
   const { account: authAccount, updateProfile, refresh: refreshAuth } = useAuth();
   const state = useSignaling();
@@ -408,6 +435,7 @@ function ProfileContent({
   const [previewBanner, setPreviewBanner] = useState<string | null>(account.bannerUrl ?? null);
   const [editTheme, setEditTheme] = useState<ProfileTheme | null>(account.profileTheme ?? null);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [editSong, setEditSong] = useState("");
   const [bannerPickerOpen, setBannerPickerOpen] = useState(false);
   const [bannerDataUrl, setBannerDataUrl] = useState<string | null | undefined>(undefined);
   const [saving, setSaving] = useState(false);
@@ -428,6 +456,7 @@ function ProfileContent({
     setPreviewBanner(account.bannerUrl ?? null);
     setBannerDataUrl(undefined);
     setEditTheme(account.profileTheme ?? null);
+    setEditSong(songLinkOf(account.profileSong));
   }, [account]);
 
   // Load cosmetics when entering edit mode or when owned items change
@@ -573,6 +602,7 @@ function ProfileContent({
     setPreviewBanner(account.bannerUrl ?? null);
     setBannerDataUrl(undefined);
     setEditTheme(account.profileTheme ?? null);
+    setEditSong(songLinkOf(account.profileSong));
     setAvatarPickerOpen(false);
     setBannerPickerOpen(false);
     setError(null);
@@ -595,6 +625,9 @@ function ProfileContent({
         avatar: avatarDataUrl,
         banner: bannerDataUrl,
         profileTheme: editTheme,
+        // Trimmed to "" rather than left undefined when empty: "" is how the
+        // API is told to clear it, and undefined would mean "leave it alone".
+        song: editSong.trim(),
         equippedProfileColor: editBgColor,
       });
 
@@ -631,6 +664,7 @@ function ProfileContent({
   const currentBanner = isEditing ? previewBanner : account.bannerUrl;
   const canUploadBanner = hasFeature("banner_upload", authAccount?.features ?? []);
   const canEditTheme = hasFeature("profile_gradient", authAccount?.features ?? []);
+  const canEditSong = hasFeature("profile_song", authAccount?.features ?? []);
   // While editing, the card *is* the preview — there is no second swatch to
   // compare against, and a preview that is not the thing itself always
   // disagrees with it somewhere.
@@ -961,6 +995,22 @@ function ProfileContent({
                 In a bordered panel, like the banner section below: the form
                 used to be a column of loose rows with no edges, so a heading
                 and the controls under it did not visibly belong together. */}
+            <PlanSection tier="proMax" title="Música do perfil" locked={!canEditSong}>
+              <input
+                type="url"
+                inputMode="url"
+                disabled={!canEditSong}
+                value={editSong}
+                onChange={(e) => setEditSong(e.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              />
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Toca sozinha quando alguém abre o seu perfil. Na sala, aparece como um botão de
+                play. Ninguém leva música no meio de uma chamada sem pedir.
+              </p>
+            </PlanSection>
+
             <PlanSection tier="proMax" title="Fundo do perfil" locked={!canEditTheme}>
               {/* Shown to everybody and disabled without the plan, rather
                   than replaced by a sentence: the controls are what explain
@@ -1157,6 +1207,12 @@ function ProfileContent({
             >
               {account.bio || "Sem descrição."}
             </p>
+
+            {account.profileSong && (
+              <div className="mt-4">
+                <ProfileSongPlayer song={account.profileSong} autoPlay={autoPlaySong} />
+              </div>
+            )}
 
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <StatCard

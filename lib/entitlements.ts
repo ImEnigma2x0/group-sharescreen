@@ -32,7 +32,8 @@ export type Feature =
   | "avatar_gallery"
   | "avatar_upload"
   | "banner_upload"
-  | "profile_gradient";
+  | "profile_gradient"
+  | "profile_song";
 
 export type FeatureTier = "free" | "account" | "premium" | "premium_max";
 
@@ -48,6 +49,7 @@ export const FEATURE_TIERS: Record<Feature, FeatureTier> = {
   avatar_upload: "premium_max",
   banner_upload: "premium_max",
   profile_gradient: "premium_max",
+  profile_song: "premium_max",
 };
 
 /**
