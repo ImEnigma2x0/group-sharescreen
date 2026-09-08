@@ -14,6 +14,7 @@ import { getAccountToken, fetchAvatarOptions, type AvatarOptions } from "@/lib/a
 import { hasFeature } from "@/lib/entitlements";
 import { planIcon } from "@/components/planIcons";
 import { ProfileSongPlayer } from "@/components/ProfileSongPlayer";
+import { parseYouTubeId } from "@/lib/profileSong";
 import {
   profileThemeStyle,
   GRADIENT_DIRECTIONS,
@@ -692,9 +693,12 @@ function ProfileContent({
         avatar: avatarDataUrl,
         banner: bannerDataUrl,
         profileTheme: editTheme,
-        // Trimmed to "" rather than left undefined when empty: "" is how the
-        // API is told to clear it, and undefined would mean "leave it alone".
-        song: editSong.trim(),
+        // Only when it actually changed. Sending it on every save meant an
+        // unrelated bio edit could be refused over whatever happened to be in
+        // this field — one bad character here blocked saving the whole
+        // profile. Unchanged means undefined, which the API reads as "leave
+        // it alone"; "" is how it is told to clear one.
+        ...(songChanged ? { song: editSong.trim() } : {}),
         equippedProfileColor: editBgColor,
       });
 
@@ -720,6 +724,14 @@ function ProfileContent({
 
   // With the day, not just the month: "desde agosto de 2026" reads as an
   // approximation of something the site knows exactly.
+  // The song as it stands in the form: what was typed, or what is saved.
+  const songValue = editSong.trim();
+  const songChanged = songValue !== songLinkOf(account.profileSong);
+  const pendingSongId = songValue ? parseYouTubeId(songValue) : null;
+  // A link that is not a YouTube video, said beside the field. It used to be
+  // discovered only by pressing save and having the whole profile refused.
+  const songError = songValue && !pendingSongId ? "Esse link não é um vídeo do YouTube." : null;
+
   const memberSince = new Date(account.createdAt).toLocaleDateString("pt-BR", {
     day: "numeric",
     month: "long",
@@ -1204,25 +1216,40 @@ function ProfileContent({
                   onClose={() => setOpenField(null)}
                   label="Editar música"
                   editor={
-                    <input
-                      autoFocus
-                      type="url"
-                      inputMode="url"
-                      value={editSong}
-                      onChange={(e) => setEditSong(e.target.value)}
-                      placeholder="https://www.youtube.com/watch?v=..."
-                      className="themed-field w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-                      style={themedField}
-                    />
+                    <div className="flex flex-col gap-1">
+                      <input
+                        autoFocus
+                        type="url"
+                        inputMode="url"
+                        value={editSong}
+                        onChange={(e) => setEditSong(e.target.value)}
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        className="themed-field w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                        style={themedField}
+                      />
+                      {songError && <p className="text-xs text-red-500">{songError}</p>}
+                    </div>
                   }
                 >
-                  {account.profileSong ? (
+                  {pendingSongId ? (
                     <ProfileSongPlayer
-                      song={account.profileSong}
+                      // The pending id, so closing the editor leaves the card
+                      // showing what saving would produce — the same rule the
+                      // name and the bio follow. The title only arrives from
+                      // the API on save, so an unsaved song names itself
+                      // generically until then.
+                      song={{
+                        videoId: pendingSongId,
+                        title:
+                          account.profileSong?.videoId === pendingSongId
+                            ? account.profileSong.title
+                            : "",
+                      }}
                       // Never while editing: the card is being worked on, and
                       // music starting under that is not a preview anybody
                       // asked for.
                       autoPlay={autoPlaySong && !isEditing}
+                      theme={theme}
                     />
                   ) : (
                     <p
