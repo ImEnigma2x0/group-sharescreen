@@ -3067,25 +3067,69 @@ export function WatchRoom({ handle }: { handle: string }) {
   // still gets a tile slot showing a "click to watch"/"you left this
   // transmission" placeholder instead of just vanishing from the grid. Camera
   // mirrors screen here — see useRoomMedia's stoppedCameraPeers.
-  const stoppedEntries = visiblePeers.filter((p) => stoppedPeers.has(p.id) && !(p.id in remoteStreams));
+  // Whether this peer is currently announcing the channel a placeholder would
+  // stand in for.
+  //
+  // A placeholder is the one kind of tile that deliberately outlives the
+  // connection justifying it, so this is the only thing between a stale entry
+  // in stoppedPeers/resumingPeers and a tile for a transmission that is not
+  // happening. The room's peer list is the right authority: it is server
+  // state, rebroadcast to everyone on every change, where the peer-to-peer
+  // "stop" that is *supposed* to clear those sets is a single message the
+  // socket drops outright whenever it happens to be reconnecting.
+  //
+  // Deliberately conservative about what counts as "no". `screen` and `camera`
+  // are null on a client too old to report the breakdown and undefined on a
+  // server that predates the fields, and neither of those means off — only an
+  // explicit false does. `sharing` has been sent by every client there has
+  // ever been, so it carries the load for the rest.
+  const announcesScreen = (p: PeerInfo) => p.sharing && p.screen !== false;
+  const announcesCamera = (p: PeerInfo) => p.sharing && p.camera !== false;
+  const stoppedEntries = visiblePeers.filter(
+    (p) => stoppedPeers.has(p.id) && announcesScreen(p) && !(p.id in remoteStreams)
+  );
+  // The two placeholder sets are kept mutually exclusive at the source (see
+  // useRoomMedia's markResuming and stopWatchingPeer), and this is where it
+  // would matter if they ever stopped being: both push a tile under the same
+  // tileId, which is also its React key, so a peer in both sets is one peer
+  // rendered twice under one key. Stopped wins the tie deliberately — that
+  // placeholder carries a "Retomar transmissão" button, and "Retomando..."
+  // carries nothing, so if the two ever disagree the actionable one is the
+  // one worth showing.
   const resumingEntries = visiblePeers.filter(
-    (p) => resumingPeers.has(p.id) && !(p.id in remoteStreams)
+    (p) =>
+      resumingPeers.has(p.id) &&
+      !stoppedPeers.has(p.id) &&
+      announcesScreen(p) &&
+      !(p.id in remoteStreams)
   );
   const stoppedCameraEntries = visiblePeers.filter(
-    (p) => stoppedCameraPeers.has(p.id) && !(p.id in remoteCameraStreams)
+    (p) => stoppedCameraPeers.has(p.id) && announcesCamera(p) && !(p.id in remoteCameraStreams)
   );
   const resumingCameraEntries = visiblePeers.filter(
-    (p) => resumingCameraPeers.has(p.id) && !(p.id in remoteCameraStreams)
+    (p) =>
+      resumingCameraPeers.has(p.id) &&
+      !stoppedCameraPeers.has(p.id) &&
+      announcesCamera(p) &&
+      !(p.id in remoteCameraStreams)
   );
   // Music slots are skipped: a placeholder stands in for a missing *tile*, and
   // a soundtrack never had one.
   const isMusicSlotOf = (peer: PeerInfo, slot: string) =>
     peer.files?.some((f) => f.channel === slot && f.mode === "music") ?? false;
+  // announcesScreen/announcesCamera's counterpart for the file slots, which
+  // are full siblings of those two channels and can strand a placeholder the
+  // same way. `files` is the same authority the tile caption already reads —
+  // undefined only from a server that predates the field, which is unknown
+  // rather than "not playing one".
+  const announcesFile = (p: PeerInfo, slot: string) =>
+    p.sharing && (p.files === undefined || p.files.some((f) => f.channel === slot));
   const stoppedFileEntries = LOCAL_MEDIA_SLOTS.flatMap((slot) =>
     visiblePeers
       .filter(
         (p) =>
           fileChannels[slot].stoppedPeers.has(p.id) &&
+          announcesFile(p, slot) &&
           !(p.id in fileChannels[slot].remoteStreams) &&
           !isMusicSlotOf(p, slot)
       )
@@ -3096,6 +3140,8 @@ export function WatchRoom({ handle }: { handle: string }) {
       .filter(
         (p) =>
           fileChannels[slot].resumingPeers.has(p.id) &&
+          !fileChannels[slot].stoppedPeers.has(p.id) &&
+          announcesFile(p, slot) &&
           !(p.id in fileChannels[slot].remoteStreams) &&
           !isMusicSlotOf(p, slot)
       )

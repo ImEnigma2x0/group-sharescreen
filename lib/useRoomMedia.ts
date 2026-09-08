@@ -122,6 +122,14 @@ type SignalData = {
   // reconnecting placeholder instead of clearing it, which is the difference
   // between a brief flicker and the stream appearing to have ended.
   reparenting?: boolean;
+  // Set on a "resume" that is a repair rather than a request: the viewer's
+  // stream never arrived and its watchdog is asking to be served directly (see
+  // RESUME_WATCHDOG_MS). The broadcaster answers it the same way either way,
+  // and additionally stops routing that viewer through a relay for a while —
+  // see relayOptOut, and why a person merely clicking "Retomar transmissão"
+  // must *not* trigger that. Absent from an older client's resume and from a
+  // deliberate one, both of which are exactly the "not a repair" case.
+  recovery?: boolean;
   // Present only on relayed traffic: who originally produced this stream, as
   // opposed to who forwarded it. The receiving side files the stream under
   // this so a relayed viewer still sees the real broadcaster's name on the
@@ -383,6 +391,35 @@ const ICE_RESTART_TIMEOUT_MS = 6000;
 // which is the one outcome neither side can recover from cheaply.
 const RECV_RECOVERY_TIMEOUT_MS = 9000;
 
+// How long a peer may sit in `resumingPeers` before this side stops waiting.
+//
+// Every route into that set is a promise that something is on its way — a
+// resume we just asked for, or a handover whose new parent is mid-offer — and
+// every one of them was made with nothing behind it. "Retomando..." has no
+// timeout, no retry and no button (see ResumingPeerTile), so any lost message
+// anywhere along the way left that tile dead for the rest of the room's life,
+// with the person watching it unable to do a single thing about it. The
+// signalling socket drops outright while reconnecting (see signalingClient's
+// rawSend), the server drops over its rate limit and when a target's pending
+// queue overflows, and a relay's offer that never arrives leaves a pc that
+// never even starts ICE and so never reaches "failed" — there are a lot of
+// ways for the promise not to be kept.
+//
+// Generous enough to cover a slow ICE/TURN negotiation on a bad link (the
+// same budget CONNECT_TIMEOUT_MS gives the direct path) so a connection that
+// is merely taking its time is never given up on.
+const RESUME_WATCHDOG_MS = 15_000;
+
+// How long a viewer stays pinned to a direct connection after the cascade
+// visibly failed them — see relayOptOut.
+//
+// Long relative to REPLAN_COOLDOWN_MS (6s) on purpose: the point is to
+// outlast several planning passes. The plan is deliberately sticky (see
+// planTopology's currentParents), so without this a viewer we had just
+// rescued was handed straight back to the relay that failed them on the very
+// next pass, and flapped between the two every six seconds indefinitely.
+const RELAY_OPT_OUT_MS = 45_000;
+
 // Shared connection-management for a single media channel (screen share or
 // mic), broadcast from this client to every peer in the room. Each channel
 // gets its own set of peer connections and its own signaling namespace so
@@ -462,6 +499,12 @@ function useBroadcastChannel(
   const [active, setActive] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+  // Read off the render path by the resume watchdog, which has to answer
+  // "did anything actually arrive for this origin?" from inside a timer.
+  const remoteStreamsRef = useRef(remoteStreams);
+  useEffect(() => {
+    remoteStreamsRef.current = remoteStreams;
+  }, [remoteStreams]);
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<ShareSource | undefined>(undefined);
   // Peers whose stream WE (as a viewer) deliberately stopped receiving, via
@@ -547,6 +590,30 @@ function useBroadcastChannel(
   // direct sendPC to them: doing so would double-encode and double-send the
   // very stream the cascade exists to avoid sending twice.
   const relayedAway = useRef<Set<string>>(new Set());
+  // Relays we told to serve somebody on the last planning pass.
+  //
+  // A relay that drops out of the plan entirely does not appear in the new
+  // assignment map at all, so nothing in applyRelayPlan used to say a word to
+  // it — and nothing else ever would. It went on re-encoding and sending to
+  // children the root had already taken back and was serving directly: the
+  // same stream reaching the same viewer twice, out of two machines, for as
+  // long as that relay stayed in the room. Remembering who we last spoke to is
+  // what lets applyRelayPlan tell them it is over.
+  const activeRelays = useRef<Set<string>>(new Set());
+  // Viewers to keep serving directly for a while, whatever the plan says —
+  // see RELAY_OPT_OUT_MS. Written when the cascade visibly fails somebody: a
+  // relay-nack, or a "resume" from a viewer's own stuck-tile watchdog.
+  const relayOptOut = useRef<Map<string, number>>(new Map());
+  const optOutOfRelaying = useCallback((peerId: string) => {
+    relayOptOut.current.set(peerId, Date.now() + RELAY_OPT_OUT_MS);
+  }, []);
+  const isRelayOptedOut = useCallback((peerId: string) => {
+    const until = relayOptOut.current.get(peerId);
+    if (until === undefined) return false;
+    if (Date.now() < until) return true;
+    relayOptOut.current.delete(peerId);
+    return false;
+  }, []);
 
   // Stable getter identities so consumers' effects don't re-run every render.
   // useCallback rather than a ref holding a closure: reading .current during
@@ -594,22 +661,114 @@ function useBroadcastChannel(
       return next;
     });
   }, []);
-  const clearResuming = useCallback((peerId: string) => {
-    setResumingPeers((prev) => {
-      if (!prev.has(peerId)) return prev;
-      const next = new Set(prev);
-      next.delete(peerId);
-      return next;
-    });
+  // The timers that stop "Retomando..." from being forever — one per peer in
+  // resumingPeers, keyed by origin exactly as that set is. See
+  // RESUME_WATCHDOG_MS.
+  const resumeWatchdogs = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const clearResumeWatchdog = useCallback((peerId: string) => {
+    const timer = resumeWatchdogs.current.get(peerId);
+    if (timer) clearTimeout(timer);
+    resumeWatchdogs.current.delete(peerId);
   }, []);
+  // Lets the watchdog re-arm itself for its second attempt without the
+  // callback having to close over its own binding.
+  const armResumeWatchdogRef = useRef<(peerId: string, attempt: number) => void>(() => {});
+  const armResumeWatchdog = useCallback(
+    (peerId: string, attempt: number) => {
+      const previous = resumeWatchdogs.current.get(peerId);
+      if (previous) clearTimeout(previous);
+      const timer = setTimeout(() => {
+        resumeWatchdogs.current.delete(peerId);
+        // Resolved the ordinary way while we waited — the stream arrived (see
+        // openRecvPC's ontrack), or something took this peer out of the set.
+        if (!resumingPeersRef.current.has(peerId)) return;
+        // Or it was already here and the placeholder is merely stale: a lost
+        // "stop" can leave a second connection delivering this origin while a
+        // handover marks it resuming, and asking for a repair to something
+        // that is playing would tear down a working stream to rebuild it.
+        if (remoteStreamsRef.current[peerId]) {
+          setResumingPeers((prev) => {
+            if (!prev.has(peerId)) return prev;
+            const next = new Set(prev);
+            next.delete(peerId);
+            return next;
+          });
+          return;
+        }
+        if (attempt === 0) {
+          // Ask once, as loudly as the protocol allows, before giving up.
+          // "resume" is the strongest thing a viewer can say and it repairs
+          // every way this can be stuck at once: the broadcaster's handler
+          // forgets any relay arrangement for us and force-rebuilds a direct
+          // connection regardless of what its own side believes is true.
+          //
+          // Sent to the *origin* deliberately. A relay that never managed to
+          // open our connection is not the party who can fix it, and after a
+          // handover there may be no relay in the picture at all.
+          signalingClient.sendSignal(peerId, {
+            channel,
+            role: "viewer",
+            kind: "resume",
+            // Distinguishes this from a person clicking "Retomar
+            // transmissão" — see SignalData.recovery.
+            recovery: true,
+          });
+          armResumeWatchdogRef.current(peerId, 1);
+          return;
+        }
+        // Nothing came of that either. Stop claiming something is on its way:
+        // a placeholder that is lying is a permanently dead tile, where a
+        // stopped one is one click from trying the whole thing again.
+        setResumingPeers((prev) => {
+          if (!prev.has(peerId)) return prev;
+          const next = new Set(prev);
+          next.delete(peerId);
+          return next;
+        });
+        setStoppedPeers((prev) => {
+          if (prev.has(peerId)) return prev;
+          const next = new Set(prev);
+          next.add(peerId);
+          return next;
+        });
+        trackEvent(`${eventPrefix}_resume_timeout`);
+      }, RESUME_WATCHDOG_MS);
+      resumeWatchdogs.current.set(peerId, timer);
+    },
+    [channel, eventPrefix]
+  );
+  useEffect(() => {
+    armResumeWatchdogRef.current = armResumeWatchdog;
+  }, [armResumeWatchdog]);
+
+  const clearResuming = useCallback(
+    (peerId: string) => {
+      clearResumeWatchdog(peerId);
+      setResumingPeers((prev) => {
+        if (!prev.has(peerId)) return prev;
+        const next = new Set(prev);
+        next.delete(peerId);
+        return next;
+      });
+    },
+    [clearResumeWatchdog]
+  );
   const markResuming = useCallback((peerId: string) => {
+    // The mirror of stopWatchingPeer's clearResuming, and it was missing.
+    // The two sets are read as alternatives everywhere, and a peer in both
+    // renders two tiles under one id — WatchRoom keys both placeholders by
+    // tileId(kind, peer.id). Only one direction enforced it, so a reparenting
+    // "stop" for someone we had already stopped watching produced exactly the
+    // duplicate the other direction exists to prevent.
+    clearStopped(peerId);
+    armResumeWatchdog(peerId, 0);
     setResumingPeers((prev) => {
       if (prev.has(peerId)) return prev;
       const next = new Set(prev);
       next.add(peerId);
       return next;
     });
-  }, []);
+  }, [clearStopped, armResumeWatchdog]);
   const videoQualityRef = useRef(videoQuality);
   const qualityCeilingRef = useRef<QualityTier>(videoQuality?.ceilingTier ?? BEST_TIER);
   const degradationModeRef = useRef<DegradationMode>(videoQuality?.degradation ?? "text");
@@ -679,7 +838,12 @@ function useBroadcastChannel(
 
 
   const closeRecvPC = useCallback(
-    (peerId: string) => {
+    // `reparenting` says this connection is being replaced rather than ending
+    // — the same distinction the "stop" signal carries, and it matters here
+    // for one reason: if we are relaying this stream onward, our whole subtree
+    // has to be told which of the two just happened to us. Defaulted to the
+    // ending case, which is what every other caller means.
+    (peerId: string, reparenting = false) => {
       const pc = recvPCs.current.get(peerId);
       if (pc) {
         pc.close();
@@ -693,8 +857,28 @@ function useBroadcastChannel(
       // stream must be removed by origin or it would linger forever.
       const origin = recvOrigins.current.get(peerId) ?? peerId;
       recvOrigins.current.delete(peerId);
+      // Our children were being served this stream by us. Releasing the link
+      // tells them, and until now it always told them the stream had *ended* —
+      // even when we were merely being handed a new parent for it a second
+      // later. Every reparenting of a mid-tree relay therefore blanked every
+      // tile in the subtree below it, rather than leaving them a placeholder
+      // for the moment the next relay-assign rebuilds them.
+      //
+      // Unconditional even when another connection still delivers this origin
+      // (below): a relay whose source pc has closed cannot forward anything,
+      // and the next relay-assign rebuilds it from whichever source survived.
+      relays.current.release(origin, reparenting ? "reparent" : "ended");
+      // Everything the *tile* is keyed by, on the other hand, is only ours to
+      // tear down if nothing else is still feeding it. Connections are keyed
+      // by sender and tiles by origin, so a handover legitimately has two
+      // connections for one origin for a moment — and a lost "stop" can leave
+      // the old one lingering well past that. Whichever of the two closes
+      // first used to wipe the entry the other had just filled, which blanks
+      // a tile whose stream is arriving perfectly well and leaves nothing to
+      // ever fill it again: ontrack has already fired and will not fire twice.
+      const stillDelivered = [...recvOrigins.current.values()].some((id) => id === origin);
+      if (stillDelivered) return;
       relaySources.current.delete(origin);
-      relays.current.release(origin);
       removeRemoteStream(origin);
       setRecvConnectionStates((prev) => {
         if (!(origin in prev)) return prev;
@@ -794,16 +978,16 @@ function useBroadcastChannel(
 
   const resumeWatchingPeer = useCallback(
     (peerId: string) => {
-      clearStopped(peerId);
-      setResumingPeers((prev) => {
-        if (prev.has(peerId)) return prev;
-        const next = new Set(prev);
-        next.add(peerId);
-        return next;
-      });
+      // markResuming rather than the same three lines inline: it is the one
+      // place that keeps the two placeholder sets exclusive and arms the
+      // watchdog, and this used to be the route into `resumingPeers` that had
+      // neither. A single "resume" over a socket that silently drops what it
+      // cannot send (see signalingClient's rawSend) was the entire recovery
+      // story for a tile with no other way back.
+      markResuming(peerId);
       signalingClient.sendSignal(peerId, { channel, role: "viewer", kind: "resume" });
     },
-    [channel, clearStopped]
+    [channel, markResuming]
   );
 
   const openSendPCRef = useRef<(peerId: string) => void>(() => {});
@@ -1064,12 +1248,22 @@ function useBroadcastChannel(
   const applyRelayPlan = useCallback(
     (relayAssignments: Map<string, RelayChild[]>) => {
       if (!RELAY_ENABLED) return;
+      // Anyone the cascade has already failed is dropped from the plan here
+      // rather than in the planner: the planner reasons about capacity, and
+      // "this route was tried and did not work" is not a capacity fact. They
+      // stay out of both the children list their relay is told about and
+      // nowRelayed, so the peer-list loop goes on serving them directly.
+      const serving = new Map<string, RelayChild[]>();
+      for (const [relayId, children] of relayAssignments) {
+        const kept = children.filter((child) => !isRelayOptedOut(child.id));
+        if (kept.length > 0) serving.set(relayId, kept);
+      }
       const nowRelayed = new Set<string>();
-      for (const children of relayAssignments.values()) {
+      for (const children of serving.values()) {
         for (const child of children) nowRelayed.add(child.id);
       }
 
-      for (const [relayId, children] of relayAssignments) {
+      for (const [relayId, children] of serving) {
         signalingClient.sendSignal(relayId, {
           channel,
           role: "broadcaster",
@@ -1082,6 +1276,21 @@ function useBroadcastChannel(
           degradation: degradationModeRef.current,
         });
       }
+      // Relays this plan no longer uses. They have to be told in so many
+      // words — see activeRelays for what silence cost. An empty list is a
+      // complete instruction: setChildren releases every child still held.
+      for (const relayId of activeRelays.current) {
+        if (serving.has(relayId)) continue;
+        signalingClient.sendSignal(relayId, {
+          channel,
+          role: "broadcaster",
+          kind: "relay-assign",
+          originId: signalingClient.state.selfId ?? undefined,
+          children: [],
+          degradation: degradationModeRef.current,
+        });
+      }
+      activeRelays.current = new Set(serving.keys());
 
       // Someone a relay has taken over: drop our direct connection to them.
       // Telling them first is what stops the handover looking like a failure:
@@ -1114,7 +1323,7 @@ function useBroadcastChannel(
       }
       relayedAway.current = nowRelayed;
     },
-    [channel, closeSendPC]
+    [channel, closeSendPC, isRelayOptedOut]
   );
 
   // Lets the broadcaster change resolution/fps/bitrate mid-share to react to
@@ -1202,6 +1411,16 @@ function useBroadcastChannel(
     // signal makes closeRecvPCFully run for them (see the onSignal handler
     // below), since there's no longer a stream to have stopped watching.
     viewerPausedPeers.current.clear();
+    // The cascade's bookkeeping belongs to the share that built it. Left
+    // behind, `relayedAway` would make the *next* share silently skip every
+    // viewer this one had routed through a relay — openSendPCsStaggered
+    // filters on it — for as long as it took a fresh plan to say otherwise.
+    // The relays themselves need no message: the "stop" just sent above
+    // reaches them as ordinary viewers, and their own closeRecvPCFully tears
+    // down the subtree beneath them.
+    relayedAway.current.clear();
+    activeRelays.current.clear();
+    relayOptOut.current.clear();
     // Each channel only ever reports its *own* half: `setSharing` merges the
     // pair (see signalingClient.setSharing). Before that merge existed this
     // branch read `channel === "screen" ? setSharing(false) : setMic(false)`,
@@ -1339,6 +1558,14 @@ function useBroadcastChannel(
         const origin = recvOrigins.current.get(peerId) ?? peerId;
         setRemoteStreams((prev) => ({ ...prev, [origin]: e.streams[0] }));
         clearResuming(origin);
+        // A stream is arriving from them, so neither placeholder is true any
+        // more — including the stopped one, which only clearResuming's twin
+        // used to retire. That mattered once the resume watchdog started
+        // moving a peer into stoppedPeers after giving up on them: the
+        // broadcaster's own retry loop can perfectly well succeed afterwards,
+        // and the marker it left behind would then sit there being wrong,
+        // waiting to caption the next gap as "you left this transmission".
+        clearStopped(origin);
         // Only a relay needs to hold on to the pc and stream: it is the source
         // it will forward, and the thing it must watch for stalls.
         if (RELAY_ENABLED && channel === "screen") {
@@ -1417,7 +1644,7 @@ function useBroadcastChannel(
       };
       return pc;
     },
-    [channel, closeRecvPC, clearResuming, requestReconnect]
+    [channel, closeRecvPC, clearResuming, clearStopped, requestReconnect]
   );
 
   useEffect(() => {
@@ -1528,8 +1755,20 @@ function useBroadcastChannel(
             // reparenting into a tile that vanished and then reappeared.
             // Marking it resuming keeps a placeholder on screen for the second
             // or two in between, and openRecvPC's ontrack clears it.
-            closeRecvPC(from);
-            markResuming(recvOrigins.current.get(from) ?? from);
+            //
+            // The origin has to be read *before* closeRecvPC, which deletes the
+            // sender→origin mapping on its way out. Reading it afterwards meant
+            // the `?? from` fallback always won, and on the one path where
+            // sender and origin differ — a relay handing a child on — that put
+            // the *relay* into resumingPeers instead of the broadcaster. Two
+            // things followed, both permanent: the broadcaster's tile went
+            // blank with no placeholder at all, and a participant transmitting
+            // nothing acquired a "Retomando..." tile that nothing could ever
+            // clear, since ontrack clears by origin. Direct traffic hid it
+            // completely — there the two ids are the same.
+            const origin = recvOrigins.current.get(from) ?? from;
+            closeRecvPC(from, true);
+            markResuming(origin);
             return;
           }
           // The broadcaster stopped sharing entirely — nothing to "come
@@ -1545,8 +1784,18 @@ function useBroadcastChannel(
           // because by the time it did arrive the plan would likely be stale.
           if (!RELAY_ENABLED || channel !== "screen") return;
           const origin = data.originId ?? from;
-          const source = relaySources.current.get(origin);
           if (!data.children) return;
+          // An assignment naming nobody is the root saying this relay is no
+          // longer part of the plan (see applyRelayPlan). Answered before the
+          // source check below, because it has to work in exactly the case
+          // that check rejects: our source being gone is precisely when a link
+          // still holding children would otherwise go on re-encoding for
+          // people the root has already taken back.
+          if (data.children.length === 0) {
+            relays.current.get(origin)?.releaseAllChildren();
+            return;
+          }
+          const source = relaySources.current.get(origin);
           if (!source) {
             // We are not receiving this stream, so we cannot forward it. That
             // is an ordinary situation — we may have stopped watching them, be
@@ -1608,6 +1857,10 @@ function useBroadcastChannel(
           if (!activeRef.current) return;
           for (const child of data.children ?? []) {
             relayedAway.current.delete(child.id);
+            // And keep them here. Taking them back for one pass and handing
+            // them to the same relay six seconds later is not a recovery, it
+            // is a flap — see relayOptOut.
+            optOutOfRelaying(child.id);
             if (!viewerPausedPeers.current.has(child.id)) openSendPC(child.id);
           }
           trackEvent("relay_nack");
@@ -1655,6 +1908,16 @@ function useBroadcastChannel(
           // duplicate, and lets the next planning pass decide afresh whether
           // they should go back to a relay.
           relayedAway.current.delete(from);
+          // A resume flagged as a repair is a viewer whose relayed stream
+          // never arrived at all, asking to be served by us instead (see
+          // RESUME_WATCHDOG_MS). Letting the next planning pass hand them
+          // straight back to the route that just failed them would undo the
+          // rescue six seconds after it worked, so that route is closed to
+          // them for a while. A person clicking "Retomar transmissão" is not
+          // this and does not set the flag — nothing was broken there, and
+          // pinning every manual resume to a direct connection would put load
+          // back on a broadcaster the cascade exists to take it off.
+          if (data.recovery) optOutOfRelaying(from);
           // Closed first, deliberately. openSendPC is a no-op when a pc for
           // this peer already exists, and one can perfectly well still be
           // sitting there: the "stop" that should have torn it down is sent
@@ -1763,6 +2026,11 @@ function useBroadcastChannel(
       if (resumingPeersRef.current.has(peerId)) clearResuming(peerId);
       viewerPausedPeers.current.delete(peerId);
       sendRetryAttempts.current.delete(peerId);
+      relayedAway.current.delete(peerId);
+      activeRelays.current.delete(peerId);
+      // Someone who has left the room and comes back is a fresh viewer, not
+      // one still carrying the verdict of a handover that failed minutes ago.
+      relayOptOut.current.delete(peerId);
     }
 
     const unsubscribeRoomJoined = signalingClient.onRoomJoined(() => {
@@ -1835,6 +2103,7 @@ function useBroadcastChannel(
     clearStopped,
     clearResuming,
     markResuming,
+    optOutOfRelaying,
     tierForPeer,
   ]);
 
@@ -1864,6 +2133,7 @@ function useBroadcastChannel(
     const pcs = recvPCs.current;
     const pausedPeers = viewerPausedPeers.current;
     const recoveryTimers = recvRecoveryTimers.current;
+    const watchdogs = resumeWatchdogs.current;
     return () => {
       stop();
       // Closing the pcs directly rather than through closeRecvPC means these
@@ -1873,6 +2143,11 @@ function useBroadcastChannel(
       // ask a room we have left for a reconnect.
       for (const timer of recoveryTimers.values()) clearTimeout(timer);
       recoveryTimers.clear();
+      // Same reasoning, and these are not harmless if left: the resumingPeers
+      // set is emptied below, so every one of them would fire against a room
+      // that no longer exists and send a "resume" into it.
+      for (const timer of watchdogs.values()) clearTimeout(timer);
+      watchdogs.clear();
       for (const pc of pcs.values()) pc.close();
       pcs.clear();
       setRemoteStreams({});
