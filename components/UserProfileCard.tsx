@@ -28,7 +28,7 @@ import { prepareAvatarImage, AVATAR_IMAGE_ACCEPT, AVATAR_IMAGE_MAX_BYTES } from 
 import { MdCheck, MdEdit, MdPhotoCamera, MdDeleteOutline } from "react-icons/md";
 import useNtPopups from "ntpopups";
 import { UserBadges } from "@/components/UserBadges";
-import { openProModal } from "@/lib/proModal";
+import { useOpenPro } from "@/lib/proModal";
 
 // A person's public profile, as a self-contained card.
 //
@@ -279,12 +279,16 @@ function PlanLink({
   // look like it belonged to the same, unnamed tier.
   const mark = planIcon(tier === "proMax" ? "gold_verified" : "blue_verified");
   const Mark = mark.Icon;
+  // This card renders in two places — the profile page and the room's dialog
+  // — so where to send somebody is not a decision it can make on its own.
+  // See useOpenPro.
+  const openPro = useOpenPro();
   return (
     <button
       type="button"
       onClick={(e) => {
         e.preventDefault();
-        openProModal();
+        openPro();
       }}
       className={`inline-flex cursor-pointer items-center gap-1 underline underline-offset-2 transition hover:text-zinc-800 dark:hover:text-zinc-200 ${className}`}
     >

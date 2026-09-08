@@ -243,10 +243,15 @@ export function ProPanel({
     // Only the missing rows carry the tooltip: on an included one it would be
     // a hover target that says nothing. The key sits on whichever element
     // ends up in the array — the row, or the Tooltip around it.
+    //
+    // The whole row is the hover target, but "top-start" aligns the balloon
+    // with the row's leading edge — which is where the ✕ sits, since it is
+    // the list's bullet. So it reads as belonging to the mark that raised the
+    // question, while still being findable by pointing anywhere at the line.
     return included ? (
       row
     ) : (
-      <Tooltip key={feature} content="Disponível em outro plano">
+      <Tooltip key={feature} content="Disponível em outro plano" placement="top-start">
         {row}
       </Tooltip>
     );
