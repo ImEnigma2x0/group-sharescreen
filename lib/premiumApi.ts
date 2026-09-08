@@ -67,6 +67,28 @@ export async function fetchPremiumPlan(signal?: AbortSignal): Promise<PremiumPla
   }
 }
 
+/**
+ * Every plan on sale, cheapest first.
+ *
+ * Falls back to the single-plan route on an older API, so the page keeps
+ * working against a deployment that predates /premium/plans rather than
+ * showing nothing at all.
+ */
+export async function fetchPremiumPlans(signal?: AbortSignal): Promise<PremiumPlan[]> {
+  try {
+    const res = await fetch(`${getSignalingHttpBase()}/premium/plans`, { signal });
+    if (res.ok) {
+      const data = (await res.json()) as { plans?: PremiumPlan[] };
+      if (Array.isArray(data.plans) && data.plans.length > 0) return data.plans;
+    }
+  } catch {
+    // Same reasoning as fetchPremiumPlan: a page that cannot reach the API
+    // should still render.
+  }
+  const single = await fetchPremiumPlan(signal);
+  return single ? [single] : [];
+}
+
 export type StartCheckoutResult =
   | { ok: true; checkoutUrl: string }
   /**

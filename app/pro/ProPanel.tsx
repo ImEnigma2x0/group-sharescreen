@@ -12,7 +12,7 @@ import { getDesktopBridge } from "@/lib/desktop";
 import { type Feature } from "@/lib/entitlements";
 import {
   cancelPremium,
-  fetchPremiumPlan,
+  fetchPremiumPlans,
   fetchPremiumStatus,
   isPremiumActive,
   startPixPayment,
@@ -109,7 +109,13 @@ function navigateTab(tab: Window, url: string): boolean {
 
 export function ProPanel() {
   const { account, loading: resolvingAccount, refresh } = useAuth();
-  const [plan, setPlan] = useState<PremiumPlan | null>(null);
+  const [plans, setPlans] = useState<PremiumPlan[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  // Derived, not stored. Keeping a second copy of the chosen plan in state
+  // would need an effect to follow the list, and the whole page below reads
+  // `plan` — one of the two would eventually be a render behind the other.
+  const plan =
+    plans.find((entry) => entry.id === selectedPlanId) ?? plans[0] ?? null;
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,8 +172,8 @@ export function ProPanel() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetchPremiumPlan(controller.signal).then((loaded) => {
-      setPlan(loaded);
+    void fetchPremiumPlans(controller.signal).then((loaded) => {
+      setPlans(loaded);
       setLoadingPlan(false);
     });
     return () => controller.abort();
@@ -257,7 +263,7 @@ export function ProPanel() {
     const replacePage = !bridge && checkoutMustReplacePage();
     const tab = bridge || replacePage ? null : window.open("", "_blank");
 
-    const result = await startPremiumCheckout(email.trim() || undefined);
+    const result = await startPremiumCheckout(email.trim() || undefined, plan?.id);
     if (!result.ok) {
       // The placeholder has no reason to exist any more, and leaving a blank
       // tab behind after a failure reads as a second thing having gone wrong.
@@ -340,7 +346,7 @@ export function ProPanel() {
   const handlePix = useCallback(async () => {
     setBusy(true);
     setError(null);
-    const result = await startPixPayment(email.trim() || undefined);
+    const result = await startPixPayment(email.trim() || undefined, plan?.id);
     if (!result.ok) {
       setError(result.error);
       if (result.needsEmail) setNeedsEmail(true);
@@ -385,7 +391,7 @@ export function ProPanel() {
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-10">
       <h1 className="flex items-center gap-1.5 text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-        GoLive Pro
+        {plan?.title ?? "GoLive Pro"}
         {/* The plan's own mark, chosen by its `iconId` in the database (see
             components/planIcons.tsx). Rendered from the plan rather than
             hardcoded here for the same reason the price is read from it: the
@@ -395,6 +401,37 @@ export function ProPanel() {
       <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
         {plan?.description ?? "Mais qualidade na sua transmissão."}
       </p>
+
+      {/* Only with something to choose between. A single plan needs no picker,
+          and drawing one would make the page look like it is withholding an
+          option that does not exist. */}
+      {plans.length > 1 && (
+        <div className="mt-5 flex flex-wrap gap-2">
+          {plans.map((entry) => {
+            const entryMark = planIcon(entry.iconId);
+            const active = entry.id === plan?.id;
+            return (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => setSelectedPlanId(entry.id)}
+                aria-pressed={active}
+                className={`flex flex-1 items-center gap-2 rounded-xl border px-4 py-3 text-left transition ${
+                  active
+                    ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                    : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
+                }`}
+              >
+                <entryMark.Icon className={`h-5 w-5 shrink-0 ${active ? "" : entryMark.className}`} />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{entry.title}</span>
+                  <span className="block text-xs opacity-80">{entry.priceLabel} / mês</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
         {loadingPlan ? (
