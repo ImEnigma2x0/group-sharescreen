@@ -188,13 +188,58 @@ export function ProPanel() {
   // ends the old mandate when the new payment lands.
   const liveCardSub = active && !viaPix && !cancelled;
 
-  // Every benefit any plan sells, so a plan's card can also show what it does
-  // *not* include. Ordered by FEATURE_LABELS rather than by whichever plan
-  // was loaded first: the rows have to sit in the same place on every card,
-  // or comparing two plans means re-reading both lists from the top.
-  const allFeatures = (Object.keys(FEATURE_LABELS) as Feature[]).filter((feature) =>
+  // Every benefit any plan sells, split into what this one includes and what
+  // it does not — the second group is drawn last, after the points, so the
+  // card reads as "everything you get" and then "what the other plan adds".
+  // Interleaving them (which is what listing them in one fixed order did) put
+  // greyed-out rows in the middle of the perks somebody is paying for.
+  //
+  // Within each group the order is FEATURE_LABELS's, so the sequence of the
+  // perks themselves is still the same on every card.
+  const sellableFeatures = (Object.keys(FEATURE_LABELS) as Feature[]).filter((feature) =>
     plans.some((entry) => entry.features.includes(feature))
   );
+  const includedFeatures = sellableFeatures.filter((feature) => plan?.features.includes(feature));
+  const missingFeatures = sellableFeatures.filter((feature) => !plan?.features.includes(feature));
+
+  // One row, drawn the same way in both groups. A function rather than two
+  // copies of the markup, so a change to a row cannot land in one list and
+  // miss the other.
+  const featureRow = (feature: Feature, included: boolean) => {
+    const label = FEATURE_LABELS[feature];
+    if (!label) return null;
+    const row = (
+      <li
+        key={feature}
+        className={`flex items-center gap-2 text-sm ${
+          included ? "text-zinc-700 dark:text-zinc-300" : "text-zinc-400 dark:text-zinc-600"
+        }`}
+      >
+        {included ? (
+          <MdCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-500" />
+        ) : (
+          <MdClose className="h-4 w-4 shrink-0" />
+        )}
+        {/* The badge perk shows the badge. Between the tick and the words
+            rather than replacing the tick: the tick is the list's bullet and
+            every row keeps one. */}
+        {feature === "verified_badge" && included && (
+          <PlanMark className={`-mr-0.5 h-4 w-4 shrink-0 ${mark.className}`} />
+        )}
+        {label}
+      </li>
+    );
+    // Only the missing rows carry the tooltip: on an included one it would be
+    // a hover target that says nothing. The key sits on whichever element
+    // ends up in the array — the row, or the Tooltip around it.
+    return included ? (
+      row
+    ) : (
+      <Tooltip key={feature} content="Disponível em outro plano">
+        {row}
+      </Tooltip>
+    );
+  };
   /** The money for the code on screen has landed and bought time. */
   const pixPaid = Boolean(pix) && active && (premium?.currentPeriodEnd ?? 0) > pixBaselineEnd;
   /** A Pix code on screen that has not been paid yet. */
@@ -480,49 +525,7 @@ export function ProPanel() {
             </div>
 
             <ul className="mt-4 flex flex-col gap-2">
-              {allFeatures.map((feature) => {
-                const label = FEATURE_LABELS[feature];
-                if (!label) return null;
-                // What this plan does not include is shown rather than hidden.
-                // A list of only the perks somebody already gets cannot answer
-                // the question the page exists for — what the other plan buys
-                // — and leaving it out makes the cheaper card look complete.
-                const included = plan.features.includes(feature);
-                const row = (
-                  <li
-                    key={feature}
-                    className={`flex items-center gap-2 text-sm ${
-                      included
-                        ? "text-zinc-700 dark:text-zinc-300"
-                        : "text-zinc-400 dark:text-zinc-600"
-                    }`}
-                  >
-                    {included ? (
-                      <MdCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-500" />
-                    ) : (
-                      <MdClose className="h-4 w-4 shrink-0" />
-                    )}
-                    {/* The badge perk shows the badge. Between the tick and
-                        the words rather than replacing the tick: the tick is
-                        the list's bullet and every row keeps one. */}
-                    {feature === "verified_badge" && included && (
-                      <PlanMark className={`-mr-0.5 h-4 w-4 shrink-0 ${mark.className}`} />
-                    )}
-                    {label}
-                  </li>
-                );
-                // Only the missing rows carry the tooltip: on an included one
-                // it would be a hover target that says nothing.
-                // The key sits on whichever element ends up in the array:
-                // the row itself when included, the Tooltip around it when not.
-                return included ? (
-                  row
-                ) : (
-                  <Tooltip key={feature} content="Disponível em outro plano">
-                    {row}
-                  </Tooltip>
-                );
-              })}
+              {includedFeatures.map((feature) => featureRow(feature, true))}
               {/* Listed here rather than through `features` because that list
                   is the entitlement table — things the server decides an
                   account may *do* — and points are not a permission, they are
@@ -540,6 +543,10 @@ export function ProPanel() {
                   Mais {plan.dailyPoints} pontos por dia de assinatura
                 </li>
               )}
+              {/* Last, always. What a plan does not include is worth showing —
+                  it is the answer to "why would I pay more" — but it is not
+                  what somebody reading their own plan's card came for. */}
+              {missingFeatures.map((feature) => featureRow(feature, false))}
             </ul>
 
             <div className="mt-6">
