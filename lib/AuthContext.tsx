@@ -19,6 +19,7 @@ import {
   loginAccount,
   registerAccount,
   completeOAuthSignup as completeOAuthSignupRequest,
+  linkOAuthToExistingAccount as linkOAuthToExistingAccountRequest,
   unlinkOAuthProvider as unlinkOAuthProviderRequest,
   updateProfile as updateProfileRequest,
   type UpdateProfileInput,
@@ -57,6 +58,11 @@ type AuthContextValue = {
   // social *login* needs nothing from this context beyond refresh(), since
   // its token arrives through accountApi's store on its own.
   completeOAuthSignup: (ticket: string, username: string, displayName: string) => Promise<Account>;
+  // The other half of that step, for somebody the automatic match could not
+  // recognise: an account that already exists here, claimed with its own
+  // password, with the provider linked to it on the way in. Ends in exactly
+  // the same place — a session for that account.
+  linkOAuthToExisting: (ticket: string, username: string, password: string) => Promise<Account>;
   // Detaches a provider, then re-resolves so the panel reflects it. Rejects
   // (with the API's message) when it would leave the account with no way in.
   unlinkProvider: (provider: string) => Promise<void>;
@@ -228,6 +234,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const linkOAuthToExisting = useCallback(
+    async (ticket: string, username: string, password: string) => {
+      const { account: acc } = await linkOAuthToExistingAccountRequest(ticket, username, password);
+      setAccount(acc);
+      setResolvedToken(getAccountToken());
+      return acc;
+    },
+    []
+  );
+
   const updateProfile = useCallback(async (input: UpdateProfileInput) => {
     const updated = await updateProfileRequest(input);
     setAccount(updated);
@@ -363,6 +379,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       completeOAuthSignup,
+      linkOAuthToExisting,
       unlinkProvider,
       updateProfile,
       logout,
@@ -377,6 +394,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       completeOAuthSignup,
+      linkOAuthToExisting,
       unlinkProvider,
       updateProfile,
       logout,

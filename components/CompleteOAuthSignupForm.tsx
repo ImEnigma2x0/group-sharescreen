@@ -19,6 +19,8 @@ const primaryButtonClass =
 const secondaryButtonClass =
   "rounded-lg border border-zinc-300 px-4 py-2.5 font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900";
 const labelClass = "text-sm font-medium text-zinc-700 dark:text-zinc-300";
+const linkButtonClass =
+  "text-sm font-medium underline underline-offset-2 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100";
 
 const PROVIDER_LABEL: Record<OAuthProviderId, string> = {
   discord: "Discord",
@@ -49,11 +51,17 @@ export function CompleteOAuthSignupForm({
   onSuccess?: () => void;
   onCancel?: () => void;
 }) {
-  const { completeOAuthSignup } = useAuth();
+  const { completeOAuthSignup, linkOAuthToExisting } = useAuth();
   const [username, setUsername] = useState(suggestedUsername);
   const [displayName, setDisplayName] = useState(suggestedDisplayName);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // The other way out of this step (see `claiming` below): the person already
+  // has an account here and is claiming it with its password instead of
+  // creating a second one.
+  const [claiming, setClaiming] = useState(false);
+  const [claimUsername, setClaimUsername] = useState(suggestedUsername);
+  const [claimPassword, setClaimPassword] = useState("");
 
   // Mint the captcha token while this form is being filled in, not when it is
   // submitted. Turnstile does its work when its widget renders, so asking for
@@ -88,6 +96,90 @@ export function CompleteOAuthSignupForm({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Claiming an account that already exists here. The ticket is the same one
+  // the signup above would have used — the server links this provider to that
+  // account once the password checks out, and the login ends there.
+  async function submitClaim() {
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      await linkOAuthToExisting(ticket, claimUsername.trim(), claimPassword);
+      trackEvent("account_login_oauth_linked");
+      onSuccess?.();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Usuário ou senha inválidos.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleClaimSubmit(e: FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    if (!claimUsername.trim() || !claimPassword) return;
+    void submitClaim();
+  }
+
+  if (claiming) {
+    return (
+      <form onSubmit={handleClaimSubmit} className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
+            Entrar na conta que você já tem
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Confirme sua senha e o {PROVIDER_LABEL[provider]} fica conectado a ela — da próxima
+            vez, o botão entra direto.
+          </p>
+        </div>
+        <label htmlFor="claim-username" className={labelClass}>
+          Usuário
+        </label>
+        <input
+          id="claim-username"
+          autoFocus
+          autoComplete="username"
+          value={claimUsername}
+          onChange={(e) => setClaimUsername(e.target.value)}
+          maxLength={20}
+          className={inputClass}
+        />
+        <label htmlFor="claim-password" className={labelClass}>
+          Senha
+        </label>
+        <input
+          id="claim-password"
+          type="password"
+          autoComplete="current-password"
+          value={claimPassword}
+          onChange={(e) => setClaimPassword(e.target.value)}
+          className={inputClass}
+        />
+        {formError && <p className="text-sm text-red-500">{formError}</p>}
+        <div className="mt-2 flex gap-2">
+          <button
+            type="submit"
+            disabled={submitting || !claimUsername.trim() || !claimPassword}
+            className={`flex flex-1 items-center justify-center gap-2 ${primaryButtonClass}`}
+          >
+            {submitting && <ButtonSpinner />}
+            {submitting ? "Entrando..." : "Entrar e conectar"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setClaiming(false);
+              setFormError(null);
+            }}
+            className={secondaryButtonClass}
+          >
+            Voltar
+          </button>
+        </div>
+      </form>
+    );
   }
 
   function handleSubmit(e: FormEvent) {
@@ -139,6 +231,22 @@ export function CompleteOAuthSignupForm({
         className={inputClass}
       />
       {formError && <p className="text-sm text-red-500">{formError}</p>}
+      {/* Offered here rather than only at the bottom, because this is the
+          exact moment it is needed: the name that was refused is, more often
+          than not, the person's own — the suggestion comes from the same
+          provider handle they registered with. Before this existed, that
+          refusal was the end of the road. */}
+      <button
+        type="button"
+        onClick={() => {
+          setClaiming(true);
+          setClaimUsername(username.trim() || suggestedUsername);
+          setFormError(null);
+        }}
+        className={`self-start ${linkButtonClass}`}
+      >
+        Já tenho uma conta no GoLive
+      </button>
       <div className="mt-2 flex gap-2">
         <button
           type="submit"

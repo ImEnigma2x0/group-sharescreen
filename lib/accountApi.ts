@@ -275,6 +275,34 @@ export async function completeOAuthSignup(
   return data;
 }
 
+/**
+ * The other ending for a signup ticket: the person already has an account
+ * here and proves it with their password, and the provider is linked to it.
+ *
+ * Same { token, account } contract as loginAccount, because that is what this
+ * is — a login. The captcha action is "login" too, matching the route.
+ */
+export async function linkOAuthToExistingAccount(
+  ticket: string,
+  username: string,
+  password: string
+): Promise<{ token: string; account: Account }> {
+  const res = await fetch(`${getSignalingHttpBase()}/auth/oauth/link-existing`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ticket,
+      username,
+      password,
+      ...(await captchaFieldFor("login")),
+    }),
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res, "Usuário ou senha inválidos."));
+  const data = (await res.json()) as { token: string; account: Account };
+  setAccountToken(data.token);
+  return data;
+}
+
 export function logoutAccount() {
   setAccountToken(null);
 }
