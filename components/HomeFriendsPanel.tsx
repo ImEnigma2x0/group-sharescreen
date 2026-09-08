@@ -5,6 +5,7 @@ import { useState } from "react";
 import { MdCall, MdChatBubbleOutline, MdPersonAdd } from "react-icons/md";
 import { DisplayUserName } from "@/components/DisplayUserName";
 import { UserAvatar } from "@/components/UserAvatar";
+import { UserProfileDialog } from "@/components/UserProfileDialog";
 import { Tooltip } from "@/components/Tooltip";
 import { AddFriendDialog } from "@/components/AddFriendDialog";
 import { useAuth } from "@/lib/AuthContext";
@@ -37,22 +38,36 @@ import { startCall } from "@/lib/callsApi";
 // looking for.
 
 const ICON_ACTION =
-  "flex h-8 w-8 items-center justify-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-50";
+  "flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-50";
 
 function FriendRow({
   user,
   busy,
   onCall,
+  onOpenProfile,
 }: {
   user: SocialUser;
   busy: boolean;
   onCall: () => void;
+  onOpenProfile: () => void;
 }) {
   return (
     <li className="flex items-center gap-2.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-2 dark:border-zinc-800 dark:bg-zinc-950">
-      <Link
-        href={`/user/${user.username}`}
-        className="flex min-w-0 flex-1 items-center gap-2.5"
+      {/* A button, not a link, and for the same reason the room's participant
+          list uses one (see ParticipantRow): this goes nowhere. Marking it up
+          as navigation would promise a middle-click and a "copiar endereço do
+          link" that do not exist — and the profile itself still offers the
+          page, through the "abrir em nova aba" control in the dialog's corner.
+
+          Leaving the home page was the wrong cost for "who is this?": the room
+          form beside this list is often half-filled when somebody glances at a
+          friend, and a full navigation threw that away to answer a question
+          the dialog answers in place. */}
+      <button
+        type="button"
+        onClick={onOpenProfile}
+        aria-label={`Ver o perfil de ${user.displayName}`}
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-left"
       >
         <UserAvatar
           src={user.avatarUrl}
@@ -74,7 +89,7 @@ function FriendRow({
             @{user.username}
           </span>
         </span>
-      </Link>
+      </button>
       <span className="flex shrink-0 items-center gap-1.5">
         <Tooltip content={`Ligar para ${user.displayName}`}>
           <button
@@ -103,6 +118,10 @@ function FriendRow({
 }
 
 export function HomeFriendsPanel({ className = "" }: { className?: string }) {
+  // Whose profile is open, if any. Held here rather than per row so there is
+  // one dialog on the page instead of one per friend — the same arrangement
+  // the room uses (see WatchRoom's profileUserId).
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const { account, loading: resolvingAccount } = useAuth();
   const { graph, loading } = useSocialGraph();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -206,12 +225,23 @@ export function HomeFriendsPanel({ className = "" }: { className?: string }) {
               user={user}
               busy={busyId === user.id}
               onCall={() => void call(user)}
+              onOpenProfile={() => setProfileUserId(user.id)}
             />
           ))}
         </ul>
       )}
 
       {adding && <AddFriendDialog onClose={() => setAdding(false)} />}
+      {/* Portalled to the body by the dialog itself, so it is not clipped by
+          this panel's own scroll container — the friends list above is capped
+          and scrolls, and a profile rendered inside it would open into a
+          26rem-tall box. */}
+      {profileUserId && (
+        <UserProfileDialog
+          userId={profileUserId}
+          onClose={() => setProfileUserId(null)}
+        />
+      )}
     </aside>
   );
 }

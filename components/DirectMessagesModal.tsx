@@ -276,7 +276,7 @@ export function DirectMessagesModal({
               onClick={() => void startCall(activeId)}
               aria-label={`Ligar para ${active.displayName}`}
               title={`Ligar para ${active.displayName}`}
-              className="rounded-lg p-1 text-emerald-600 transition hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+              className="cursor-pointer rounded-lg p-1 text-emerald-600 transition hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
             >
               <MdCall className="h-5 w-5" />
             </button>

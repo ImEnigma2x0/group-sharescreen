@@ -407,11 +407,31 @@ export default function Home() {
           <h2 style={{ color: "#67c7ff", maxWidth: "500px" }}>Me segue no Twitter tbm, sempre posto update e projeto por lá <Link style={{ color: "#00ff00" }} href={"https://go.nemtudo.me/golive-nemtudo-twitter"} target="_blank">x.com/NemTudo_</Link></h2>
         </>
         }
-        {/* The form and the friends list, side by side above `lg` and stacked
-          below it. The row is centred as a pair, so the page looks the same as
-          it always did for a guest — HomeFriendsPanel renders nothing without
-          an account, and a flex row with one child is just that child. */}
-        <div className="flex w-full flex-col items-center justify-center gap-4 lg:flex-row lg:items-start">
+        {/* The form and the friends list. Three layouts, and the middle one is
+          the compromise rather than the goal:
+
+            - stacked, below `lg`. The panel goes under the form.
+            - side by side from `lg`, centred *as a pair* — so the form sits a
+              little left of the page's centre. This is what the whole thing
+              used to do at every width.
+            - from `xl`, a three-column grid whose outer columns are equal, so
+              the form is dead centre of the page and the panel sits to its
+              right without moving it.
+
+          The last one cannot start any earlier, and that is arithmetic rather
+          than taste: keeping the form centred means reserving the panel's
+          width on *both* sides of it, which needs 22 + 28 + 22 rem plus the
+          gaps — about 1180px before anything overflows. Below that, a centred
+          form would push the panel off the right edge, and a page that scrolls
+          sideways is worse than one whose form sits slightly off-centre.
+
+          A guest sees none of this: HomeFriendsPanel renders nothing without an
+          account, and the grid's middle column is the form either way. */}
+        <div className="flex w-full flex-col items-center justify-center gap-4 lg:flex-row lg:items-start xl:grid xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+          {/* The panel's counterweight. Nothing is drawn in it — it exists so
+              the column holding the form has equal space on both sides, which
+              is the whole of what "centred" means here. */}
+          <div aria-hidden className="hidden xl:block" />
           <main className="w-full max-w-md rounded-2xl border border-black/10 bg-white p-8 shadow-sm dark:border-white/10 dark:bg-zinc-950">
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
               GoLive
@@ -795,7 +815,9 @@ export default function Home() {
               </form>
             )}
           </main>
-          <HomeFriendsPanel />
+          {/* Hard against the start of its column, so it stays beside the form
+              instead of drifting to the right edge on a wide screen. */}
+          <HomeFriendsPanel className="xl:justify-self-start" />
         </div>
         {/* Below the form rather than above it: somebody landing here came to
           type a room name, and a slot between the headline and that field

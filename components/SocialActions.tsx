@@ -24,7 +24,7 @@ import { AccountModal, type AccountModalMode } from "@/components/AccountModal";
 import { Tooltip } from "@/components/Tooltip";
 
 const BUTTON_BASE =
-  "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50";
+  "flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * The three actions shown when none of them can be used.

@@ -506,7 +506,7 @@ export function CallHost() {
                   <button
                     type="button"
                     onClick={() => onDecline(reasonText.trim() || undefined)}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-100 px-4 py-2.5 font-medium text-zinc-700 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                    className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-zinc-100 px-4 py-2.5 font-medium text-zinc-700 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
                   >
                     <MdCallEnd className="h-5 w-5" />
                     Recusar
@@ -515,7 +515,7 @@ export function CallHost() {
                     type="button"
                     onClick={onAccept}
                     disabled={busy}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <MdCall className="h-5 w-5" />
                     Atender
@@ -527,7 +527,7 @@ export function CallHost() {
               <button
                 type="button"
                 onClick={onCancel}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 font-medium text-white transition hover:bg-red-500"
+                className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 font-medium text-white transition hover:bg-red-500"
               >
                 <MdCallEnd className="h-5 w-5" />
                 Cancelar
@@ -566,7 +566,7 @@ export function CallHost() {
               type="button"
               autoFocus
               onClick={() => setNotice((current) => ({ ...current, declined: null }))}
-              className="w-full rounded-xl bg-zinc-900 px-4 py-2.5 font-medium text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              className="w-full cursor-pointer rounded-xl bg-zinc-900 px-4 py-2.5 font-medium text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
             >
               Entendi
             </button>
