@@ -106,6 +106,7 @@ import { useAdsterraBlocked } from "@/lib/adsterraFill";
 import { useAdsterraAvailable } from "@/lib/useAdsAllowed";
 import { DisplayUserName } from "@/components/DisplayUserName";
 import { CreateAccountForm } from "@/components/CreateAccountForm";
+import { LoginForm } from "@/components/LoginForm";
 import { RoomSkeleton } from "@/components/RoomSkeleton";
 import { MobileQualitySheet, type MobileQualityChoice } from "@/components/MobileQualitySheet";
 import { UserProfileDialog } from "@/components/UserProfileDialog";
@@ -920,7 +921,7 @@ export function WatchRoom({ handle }: { handle: string }) {
   // its limits, especially on iOS).
   useBackgroundKeepAlive(Boolean(state.room));
   const hasStoredName = useHasStoredName();
-  const { loading: resolvingAccount, account, points } = useAuth();
+  const { loading: resolvingAccount, account, points, retryIdentity } = useAuth();
   const { openPopup } = useNtPopups();
   const validHandle = HANDLE_RE.test(handle);
   // Name and access code, for a private room whose handle carries one — null
@@ -1007,6 +1008,12 @@ export function WatchRoom({ handle }: { handle: string }) {
   // an account" — mirrors the home page's identity flow so a guest who lands
   // straight in a room link isn't missing the option.
   const [creatingAccount, setCreatingAccount] = useState(false);
+  // The login half of the same gate. Rendered inline rather than through
+  // <AccountModal>, which is mounted far below this screen's early return —
+  // "Já tenho uma conta" used to set that modal's mode from here and produce
+  // nothing at all on screen, because the component that reads it never
+  // rendered on this branch.
+  const [signingIn, setSigningIn] = useState(false);
   const [guestBannerDismissed, setGuestBannerDismissed] = useState(() =>
     getStoredGuestAccountBannerDismissed()
   );
@@ -1802,19 +1809,29 @@ export function WatchRoom({ handle }: { handle: string }) {
     setTimeout(() => setLinkCopied(false), 2000);
   }
 
-  // A stored guest name, or an account token still being resolved (see
-  // AuthContext's registration effect — it's what turns that resolved
-  // account into a signalingClient.register() call, including on a direct
-  // link straight into a room like this one), means the client is still
-  // (re)connecting/registering — show a loading state instead of asking
-  // again. Excludes "banned": that connection attempt already resolved
+  // A stored guest name, an account already resolved, or an account token
+  // still being resolved (see AuthContext's registration effect — it's what
+  // turns that resolved account into a signalingClient.register() call,
+  // including on a direct link straight into a room like this one), means the
+  // client is still (re)connecting/registering — show a loading state instead
+  // of asking again.
+  //
+  // `account` is in there because `hasStoredName` cannot answer this in the
+  // installed app: that shell never registers a guest name, so it has nothing
+  // stored, and somebody who had just signed in was shown the "é preciso ter
+  // uma conta" screen for the whole time the register was in flight (or
+  // retrying, see REGISTER_ACK_TIMEOUT_MS) — which reads exactly like a login
+  // that silently failed. A real refusal sets nameError and drops out of this
+  // into that screen, which now shows the reason.
+  //
+  // Excludes "banned": that connection attempt already resolved
   // (rejected), so it's not actually still restoring and would otherwise
   // get stuck on this loading state forever instead of showing the ban
   // screen below.
   const restoring =
     !mounted ||
     (!state.name &&
-      (resolvingAccount || (hasStoredName && !state.nameError)) &&
+      (resolvingAccount || ((hasStoredName || Boolean(account)) && !state.nameError)) &&
       state.status !== "banned" &&
       // Same reasoning as "banned", and the same bug it was written to fix:
       // a superseded connection has deliberately stopped reconnecting (see
@@ -2636,11 +2653,27 @@ export function WatchRoom({ handle }: { handle: string }) {
               ? "No aplicativo é preciso ter uma conta para entrar numa sala."
               : "Escolha um nome para entrar nesta sala."}
           </p>
-          {/* The app has no guest mode — the API refuses a guest register from
-              an installed shell (see signaling.ts), so the name box here would
-              be a form whose only outcome is an error. */}
-          {appShell && !creatingAccount ? (
+          {/* The app has no guest mode — this shell is account-only, so the
+              name box here would be a form whose only outcome is an identity
+              the app doesn't offer. */}
+          {appShell && !creatingAccount && !signingIn ? (
             <div className="mt-8 flex flex-col gap-3">
+              {/* Signed in, and the signaling registration was still refused.
+                  Without this the screen simply reappeared after a successful
+                  login, saying nothing — state.nameError is only rendered by
+                  the name form, which is exactly what the app never shows. */}
+              {account && state.nameError && (
+                <div className="flex flex-col items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                  <p className="text-sm text-red-500">{state.nameError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void retryIdentity()}
+                    className="text-sm font-medium text-zinc-500 underline underline-offset-2 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => setCreatingAccount(true)}
@@ -2650,12 +2683,21 @@ export function WatchRoom({ handle }: { handle: string }) {
               </button>
               <button
                 type="button"
-                onClick={() => setAccountModal("login")}
+                onClick={() => setSigningIn(true)}
                 className="text-sm font-medium text-zinc-500 underline underline-offset-2 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
               >
                 Já tenho uma conta
               </button>
             </div>
+          ) : signingIn ? (
+            <LoginForm
+              onCancel={() => setSigningIn(false)}
+              onSuccess={() => setSigningIn(false)}
+              onSwitchToCreate={() => {
+                setSigningIn(false);
+                setCreatingAccount(true);
+              }}
+            />
           ) : creatingAccount ? (
             <CreateAccountForm
               initialDisplayName={nameInput}

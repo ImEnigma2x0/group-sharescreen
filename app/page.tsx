@@ -88,7 +88,12 @@ type RoomMode = "public" | "private-create" | "private-join";
 export default function Home() {
   const state = useSignaling();
   const router = useRouter();
-  const { loading: resolvingAccount } = useAuth();
+  const { loading: resolvingAccount, account, retryIdentity } = useAuth();
+  // A registration the server refused *after* the account was resolved (see
+  // AuthContext's retryIdentity). Only the app cares: a browser has already
+  // registered a guest name by the time it can happen, so nobody is ever
+  // stuck behind it there.
+  const [retryingIdentity, setRetryingIdentity] = useState(false);
 
 
   // Start minting a captcha token now rather than when the join fires. There
@@ -206,11 +211,20 @@ export default function Home() {
   // Now the pre-hydration render is the ordinary page. The cost is the flash
   // `mounted` was added to prevent (see its own comment), which is handled
   // below where it actually happens instead of by hiding the entire page.
+  //
+  // `account` sits alongside `hasStoredName` because that flag cannot answer
+  // this question in the installed app: the app never registers a guest name,
+  // so nothing is ever stored, and somebody who had just signed in fell
+  // straight through to the "é preciso ter uma conta" screen for as long as
+  // the register was in flight or retrying (see REGISTER_ACK_TIMEOUT_MS) —
+  // which is indistinguishable, from the outside, from a login that did
+  // nothing. A register the server actually refuses sets nameError and drops
+  // out of here into that screen, which now says why.
   const restoring =
     !banned &&
     !superseded &&
     !registered &&
-    (resolvingAccount || (hasStoredName && !state.nameError));
+    (resolvingAccount || ((hasStoredName || Boolean(account)) && !state.nameError));
 
   // "Reconectando..." is honest for a second or two and useless after fifteen:
   // the automatic retry is still running, but it has backed off to one attempt
@@ -475,7 +489,15 @@ export default function Home() {
                       // Not a page reload: the socket is what is stuck, and
                       // reloading would throw away everything else that is
                       // already loaded to fix one connection.
-                      signalingClient.retryNow();
+                      //
+                      // Through retryIdentity when there is an account, because
+                      // the socket is not always the stuck part: a register
+                      // that never went out (or was refused) leaves
+                      // signalingClient with no desired name, and reconnecting
+                      // a socket that will register nothing is a button that
+                      // does nothing. It calls retryNow() itself either way.
+                      if (account) void retryIdentity();
+                      else signalingClient.retryNow();
                       setStuckReconnecting(false);
                     }}
                     className="rounded-lg border border-zinc-300 px-3.5 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
@@ -544,16 +566,40 @@ export default function Home() {
             />
           ) : !registered ? (
             <>
-              {/* The app has no guest mode — the API refuses a guest register
-                  from an installed shell, so offering the name box here would
-                  be a form whose only outcome is an error. The two account
-                  buttons below it are the whole flow there. */}
+              {/* The app has no guest mode — this shell is account-only, so
+                  offering the name box here would be a form whose only outcome
+                  is an identity the app doesn't offer. The two account buttons
+                  below it are the whole flow there. */}
               {mode === "landing" && appShell && (
                 <div className="mt-8 flex flex-col gap-3">
                   <p className="text-sm text-zinc-600 dark:text-zinc-400">
                     No aplicativo é preciso ter uma conta. É rápido, e ela guarda seu nome, seus
                     amigos e seu plano entre os aparelhos.
                   </p>
+                  {/* Signed in, but the signaling registration was refused —
+                      which lands right back on this screen and, until this
+                      existed, said nothing at all: the name box that shows
+                      state.nameError is the one thing the app doesn't render,
+                      so a login that "worked" looked like a login that
+                      silently did nothing, and trying again did nothing too.
+                      Now it says why and offers the retry. */}
+                  {account && state.nameError && (
+                    <div className="flex flex-col items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                      <p className="text-sm text-red-500">{state.nameError}</p>
+                      <button
+                        type="button"
+                        disabled={retryingIdentity}
+                        onClick={() => {
+                          setRetryingIdentity(true);
+                          void retryIdentity().finally(() => setRetryingIdentity(false));
+                        }}
+                        className={`flex items-center gap-2 ${linkButtonClass}`}
+                      >
+                        {retryingIdentity && <ButtonSpinner />}
+                        {retryingIdentity ? "Entrando..." : "Tentar novamente"}
+                      </button>
+                    </div>
+                  )}
                   <button type="button" onClick={openCreateMode} className={primaryButtonClass}>
                     Criar uma conta
                   </button>

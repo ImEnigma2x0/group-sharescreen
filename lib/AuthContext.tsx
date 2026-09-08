@@ -73,6 +73,10 @@ type AuthContextValue = {
   // for a guest — e.g. after an action that changes it server-side (a rename,
   // a claimed reward) or outside this tab.
   refresh: () => Promise<void>;
+  // Sends the signaling registration for the current account again, after a
+  // refusal or a lookup that failed — see the callback for why a browser
+  // never needs this and the installed app does.
+  retryIdentity: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -286,15 +290,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // call for a token already connected with.
   useEffect(() => {
     if (!accountToken || loading) return;
-    if (registeredForTokenRef.current === accountToken) return;
-    registeredForTokenRef.current = accountToken;
     if (resolvedAccount) {
+      const key = `${accountToken}:account`;
+      if (registeredForTokenRef.current === key) return;
+      registeredForTokenRef.current = key;
       signalingClient.register(resolvedAccount.displayName, accountToken);
-    } else {
-      const storedName = getStoredName();
-      if (storedName) signalingClient.register(storedName);
+      return;
     }
+    const storedName = getStoredName();
+    // Nothing to register *with*: a token that didn't resolve to an account
+    // (a /auth/me that timed out — see the retry in the resolve effect) and
+    // no guest name to fall back on. Returning without touching the ref is
+    // the whole point: marking the token as done here used to strand the
+    // installed app permanently, since it is the one shell that never has a
+    // stored guest name. The register never went out, the retry a few
+    // seconds later found the token "already registered" and skipped it, and
+    // logging in again changed nothing — leaving the account-required screen
+    // as the only thing the person could ever see.
+    if (!storedName) return;
+    const key = `${accountToken}:guest`;
+    if (registeredForTokenRef.current === key) return;
+    registeredForTokenRef.current = key;
+    signalingClient.register(storedName);
   }, [accountToken, loading, resolvedAccount]);
+
+  // Ask for the signaling identity again, from scratch.
+  //
+  // Everything above is fire-and-once: a register that the server refuses
+  // (a rename budget spent, a name collision, a restart mid-handshake) sets
+  // signalingClient's nameError and stops there, and the ref means the same
+  // token never asks twice on its own. In a browser that is invisible —
+  // whoever is looking already has a guest name — but the app has no such
+  // fallback, so a single refusal is the difference between using the app
+  // and not. This is what the "tentar novamente" on those screens calls.
+  const retryIdentity = useCallback(async () => {
+    const token = getAccountToken();
+    if (!token) return;
+    registeredForTokenRef.current = null;
+    // Re-resolve first: the likeliest reason there is no account behind a
+    // stored token is that the lookup failed, not that the token is bad.
+    let current = resolvedAccount;
+    if (!current) {
+      const me = await fetchMe().catch(() => null);
+      if (me) {
+        setAccount(me.account);
+        setConnections(me.connections);
+        setResolvedToken(getAccountToken());
+        current = me.account;
+      }
+    }
+    // Throw away whatever reconnect backoff is pending too — a person
+    // pressing a button is not going to wait out ten seconds of it.
+    signalingClient.retryNow();
+    if (current) {
+      registeredForTokenRef.current = `${token}:account`;
+      signalingClient.register(current.displayName, token);
+      return;
+    }
+    const storedName = getStoredName();
+    if (storedName) {
+      registeredForTokenRef.current = `${token}:guest`;
+      signalingClient.register(storedName);
+    }
+  }, [resolvedAccount]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -309,6 +367,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile,
       logout,
       refresh,
+      retryIdentity,
     }),
     [
       resolvedAccount,
@@ -322,6 +381,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile,
       logout,
       refresh,
+      retryIdentity,
     ]
   );
 
