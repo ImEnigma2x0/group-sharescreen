@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MdCheck, MdLock } from "react-icons/md";
+import { MdCheck, MdClose, MdLock } from "react-icons/md";
+// No wrapperClassName: Tippy then attaches straight to the <li>, keeping the
+// list a plain <ul><li> instead of nesting a <span> between them.
+import { Tooltip } from "@/components/Tooltip";
 import { PixIcon } from "@/components/icons";
 import { planIcon } from "@/components/planIcons";
 import { useAuth } from "@/lib/AuthContext";
@@ -184,6 +187,14 @@ export function ProPanel() {
   // payment buttons. Switching *to another plan* is offered freely — the API
   // ends the old mandate when the new payment lands.
   const liveCardSub = active && !viaPix && !cancelled;
+
+  // Every benefit any plan sells, so a plan's card can also show what it does
+  // *not* include. Ordered by FEATURE_LABELS rather than by whichever plan
+  // was loaded first: the rows have to sit in the same place on every card,
+  // or comparing two plans means re-reading both lists from the top.
+  const allFeatures = (Object.keys(FEATURE_LABELS) as Feature[]).filter((feature) =>
+    plans.some((entry) => entry.features.includes(feature))
+  );
   /** The money for the code on screen has landed and bought time. */
   const pixPaid = Boolean(pix) && active && (premium?.currentPeriodEnd ?? 0) > pixBaselineEnd;
   /** A Pix code on screen that has not been paid yet. */
@@ -469,23 +480,47 @@ export function ProPanel() {
             </div>
 
             <ul className="mt-4 flex flex-col gap-2">
-              {plan.features.map((feature) => {
-                const label = FEATURE_LABELS[feature as Feature];
+              {allFeatures.map((feature) => {
+                const label = FEATURE_LABELS[feature];
                 if (!label) return null;
-                return (
+                // What this plan does not include is shown rather than hidden.
+                // A list of only the perks somebody already gets cannot answer
+                // the question the page exists for — what the other plan buys
+                // — and leaving it out makes the cheaper card look complete.
+                const included = plan.features.includes(feature);
+                const row = (
                   <li
                     key={feature}
-                    className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"
+                    className={`flex items-center gap-2 text-sm ${
+                      included
+                        ? "text-zinc-700 dark:text-zinc-300"
+                        : "text-zinc-400 dark:text-zinc-600"
+                    }`}
                   >
-                    <MdCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-500" />
+                    {included ? (
+                      <MdCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-500" />
+                    ) : (
+                      <MdClose className="h-4 w-4 shrink-0" />
+                    )}
                     {/* The badge perk shows the badge. Between the tick and
                         the words rather than replacing the tick: the tick is
                         the list's bullet and every row keeps one. */}
-                    {feature === "verified_badge" && (
+                    {feature === "verified_badge" && included && (
                       <PlanMark className={`-mr-0.5 h-4 w-4 shrink-0 ${mark.className}`} />
                     )}
                     {label}
                   </li>
+                );
+                // Only the missing rows carry the tooltip: on an included one
+                // it would be a hover target that says nothing.
+                // The key sits on whichever element ends up in the array:
+                // the row itself when included, the Tooltip around it when not.
+                return included ? (
+                  row
+                ) : (
+                  <Tooltip key={feature} content="Disponível em outro plano">
+                    {row}
+                  </Tooltip>
                 );
               })}
               {/* Listed here rather than through `features` because that list
