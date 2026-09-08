@@ -554,3 +554,32 @@ html .ntpopups-main {
     transform: scaleY(0.7);
   }
 }
+
+/*
+ * A slow light sweep, for the one banner that is announcing a deadline.
+ *
+ * Most of the cycle is the band sitting off-screen: it passes in under a
+ * second and then waits four, which is what makes it read as a highlight
+ * rather than as something spinning. A loop that is always moving stops being
+ * noticed and starts being noise, next to text somebody is trying to read.
+ */
+@keyframes golive-shine {
+  0% {
+    transform: translateX(-150%) skewX(-12deg);
+  }
+  22%,
+  100% {
+    transform: translateX(450%) skewX(-12deg);
+  }
+}
+
+.golive-shine {
+  animation: golive-shine 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .golive-shine {
+    animation: none;
+    opacity: 0;
+  }
+}

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { MdCheck } from "react-icons/md";
 import { useAuth } from "@/lib/AuthContext";
 import { getUserBadges, useBadgesCatalog, type BadgeDefinition } from "@/lib/badges";
@@ -13,21 +12,7 @@ import { getUserBadges, useBadgesCatalog, type BadgeDefinition } from "@/lib/bad
 // Each row carries its own colours too, so a new badge arrives on this page
 // looking like itself without a deploy.
 
-/**
- * What to say about getting one.
- *
- * Deliberately thin. The row's `description` is the explanation — written by
- * whoever created the badge, and the only place that knows whether it is
- * earned, granted, or given by a date — so this adds a line only where there
- * is something to *do*: subscribe.
- */
-function howToGet(badge: BadgeDefinition): { label: string; href?: string } {
-  if (badge.requiredPlan) return { label: "Assine o GoLive Pro", href: "/pro" };
-  return { label: "Concedida pela equipe" };
-}
-
 function BadgeCard({ badge, owned }: { badge: BadgeDefinition; owned: boolean }) {
-  const how = howToGet(badge);
   return (
     <li
       className={`group relative flex flex-col gap-3 rounded-2xl border bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-zinc-950 ${
@@ -79,8 +64,7 @@ export function BadgesPanel() {
           Badges
         </h1>
         <p className="max-w-2xl text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
-          Marcas que aparecem no perfil de quem as tem. Algumas são conquistadas, outras vêm
-          com o plano, e algumas contam há quanto tempo a pessoa está por aqui.
+          Marcas que aparecem no perfil de quem as tem. Badges são diferentes de qualquer outra coisa, elas são especiais. Algumas fáceis de obter, outras quase impossíveis. Se alguém tem uma badge, essa pessoa fica marcada pra sempre como diferente de todas as outras.
         </p>
         {account && badges.length > 0 && (
           <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">

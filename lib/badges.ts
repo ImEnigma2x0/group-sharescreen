@@ -31,6 +31,18 @@ export interface BadgeDefinition {
 // Cutoff for Beta Tester badge: all accounts created before 10/09/2026 (BRT / UTC-3).
 export const BETA_TESTER_CUTOFF_MS = new Date("2026-09-08T00:00:00-03:00").getTime();
 
+/**
+ * Through the end of 18/09/2026 (BRT): any subscription started before this
+ * instant earns the Apoiador Inicial badge.
+ *
+ * Midnight on the 19th, because "até o dia 18" includes the 18th — a cutoff
+ * at the start of the 18th would quietly cost somebody a whole last day.
+ *
+ * Lives here so the deadline is one value: the Pro page and the modal both
+ * announce it, and the day it passes they stop announcing it together.
+ */
+export const EARLY_SUPPORTER_CUTOFF_MS = new Date("2026-09-19T00:00:00-03:00").getTime();
+
 export const DEFAULT_BADGES: BadgeDefinition[] = [
   {
     id: "staff",

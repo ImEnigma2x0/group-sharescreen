@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { MdCheck, MdClose, MdLock } from "react-icons/md";
-import { BsCoin } from "react-icons/bs";
+import Link from "next/link";
+import { BsCoin, BsStars } from "react-icons/bs";
 // No wrapperClassName: Tippy then attaches straight to the <li>, keeping the
 // list a plain <ul><li> instead of nesting a <span> between them.
 import { Tooltip } from "@/components/Tooltip";
 import { PixIcon } from "@/components/icons";
 import { planIcon } from "@/components/planIcons";
+import { EARLY_SUPPORTER_CUTOFF_MS } from "@/lib/badges";
 import { useAuth } from "@/lib/AuthContext";
 import { AccountModal, type AccountModalMode } from "@/components/AccountModal";
 import { PixChargeModal } from "@/components/PixChargeModal";
@@ -129,6 +131,11 @@ export function ProPanel({
   onClose?: () => void;
 } = {}) {
   const { account, loading: resolvingAccount, refresh } = useAuth();
+  // Read once, in an initializer: Date.now() during render is an impure call
+  // and React 19 rejects it. A deadline this far out does not need to tick —
+  // a page open across midnight on the 18th is not the case worth the extra
+  // machinery.
+  const [earlySupporterOpen] = useState(() => Date.now() < EARLY_SUPPORTER_CUTOFF_MS);
   const [plans, setPlans] = useState<PremiumPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   // Derived, not stored. Keeping a second copy of the chosen plan in state
@@ -555,6 +562,31 @@ export function ProPanel({
           </button>
         )}
       </div>
+
+      {/* The Apoiador Inicial deadline, on the page and in the modal at once —
+          both render this panel. It disappears on its own once the date is
+          past (see EARLY_SUPPORTER_CUTOFF_MS): an offer that outlives its
+          deadline is a promise the site cannot keep. */}
+      {earlySupporterOpen && (
+        <div className="relative mt-5 flex items-start gap-3 overflow-hidden rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3.5">
+          {/* The sweep. Behind the text rather than over it — a highlight that
+              passes across words makes them harder to read for the moment it
+              is there, which is the opposite of what a notice wants. */}
+          <span
+            aria-hidden
+            className="golive-shine pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-emerald-300/25 to-transparent"
+          />
+          <BsStars className="relative mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+          <p className="relative text-sm leading-relaxed text-emerald-900 dark:text-emerald-200">
+            <span className="font-semibold">Apoiador Inicial:</span> quem assinar qualquer plano
+            até <span className="font-semibold">18 de setembro</span> ganha a badge de apoiador
+            inicial no perfil, para sempre.{" "}
+            <Link href="/badges" target="_blank" className="underline underline-offset-2">
+              Ver as badges
+            </Link>
+          </p>
+        </div>
+      )}
 
       {/* Only with something to choose between. A single plan needs no picker,
           and drawing one would make the page look like it is withholding an
