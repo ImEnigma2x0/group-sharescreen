@@ -75,19 +75,38 @@ export async function acceptCall(
  * Refuses a call, or gives up on one.
  *
  * One function for both because the only difference is which end is pressing
- * it, and the server already knows which end this account is. Fire-and-forget
- * by design: the ring comes off this screen immediately either way, and a
- * refusal that failed to send is corrected by the call timing out — which is
- * exactly what would have happened if the person had ignored it.
+ * it, and the server already knows which end this account is.
+ *
+ * `reason` is the sentence somebody typed when refusing, and it is optional in
+ * the strongest sense: the refusal is what matters and it happens regardless.
+ * The server answers `noteDropped` when it delivered the refusal but not the
+ * note (a blocked word, control characters), which is worth saying out loud —
+ * quietly swallowing it would leave somebody believing they had explained
+ * themselves.
+ *
+ * The promise is there for that one answer only. Nothing waits on it to take
+ * the ring off the screen: a refusal that failed to send is corrected by the
+ * call timing out, which is exactly what would have happened if the person had
+ * ignored it.
  */
-export function endCall(callId: string, side: "decline" | "cancel"): void {
-  void fetch(`${getSignalingHttpBase()}/calls/${encodeURIComponent(callId)}/${side}`, {
-    method: "POST",
-    headers: authHeaders(),
-  }).catch(() => {
-    // See above — the timeout is the backstop, and there is nothing useful to
-    // tell somebody who has already dismissed the screen.
-  });
+export async function endCall(
+  callId: string,
+  side: "decline" | "cancel",
+  reason?: string
+): Promise<{ noteDropped?: boolean }> {
+  try {
+    const res = await fetch(
+      `${getSignalingHttpBase()}/calls/${encodeURIComponent(callId)}/${side}`,
+      {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(reason ? { reason } : {}),
+      }
+    );
+    return (await res.json().catch(() => ({}))) as { noteDropped?: boolean };
+  } catch {
+    return {};
+  }
 }
 
 /**

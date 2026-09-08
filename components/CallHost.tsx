@@ -55,6 +55,12 @@ export function CallHost() {
     callEndedSeq,
   } = useSignaling();
   const [busy, setBusy] = useState(false);
+  // The refusal being typed, and which call it belongs to.
+  //
+  // Tagged with the call id rather than cleared by an effect: a second call
+  // arriving while somebody is mid-sentence must not inherit the sentence, and
+  // comparing ids answers that during render instead of one paint later.
+  const [reason, setReason] = useState<{ callId: string; text: string } | null>(null);
 
   // ─── The passing remark under the ring ──────────────────────────────────
   //
@@ -151,13 +157,24 @@ export function CallHost() {
     // for an *incoming* call: the person placing one is looking at the app by
     // definition, and a window that flashes at somebody who just pressed
     // "ligar" is flashing at them about their own action.
-    getDesktopBridge()?.setCallRinging?.(Boolean(incomingCall));
+    // Who, not just whether: with the window closed to the tray the shell
+    // draws the ring itself, and it cannot do that without a name and a face
+    // (see electron/main.ts's openCallWindow).
+    getDesktopBridge()?.setCallRinging?.(
+      incomingCall
+        ? {
+            id: incomingCall.id,
+            name: incomingCall.from.displayName,
+            avatarUrl: incomingCall.from.avatarUrl,
+          }
+        : null
+    );
 
     // Not only on unmount: this component never unmounts, so the cleanup that
     // matters is the one that runs when the call it was ringing for is gone.
     return () => {
       stopRingtone();
-      getDesktopBridge()?.setCallRinging?.(false);
+      getDesktopBridge()?.setCallRinging?.(null);
     };
   }, [incomingCall, outgoingCall]);
 
@@ -233,21 +250,48 @@ export function CallHost() {
     router.push(`/watch/${result.roomHandle}`);
   }, [busy, incomingCall, router]);
 
-  const onDecline = useCallback(() => {
-    if (!incomingCall) return;
-    stopRingtone();
-    setNotice((current) => ({ ...current, selfEnded: incomingCall.id }));
-    signalingClient.clearCall(incomingCall.id);
-    endCall(incomingCall.id, "decline");
-  }, [incomingCall]);
+  const onDecline = useCallback(
+    (reason?: string) => {
+      if (!incomingCall) return;
+      stopRingtone();
+      setNotice((current) => ({ ...current, selfEnded: incomingCall.id }));
+      signalingClient.clearCall(incomingCall.id);
+      void endCall(incomingCall.id, "decline", reason).then((result) => {
+        // The refusal went through either way — only the sentence did not.
+        // Said out loud rather than swallowed: somebody who typed an
+        // explanation should not be left believing it was delivered.
+        if (!result.noteDropped) return;
+        setNotice((current) => ({
+          ...current,
+          text: "Recusada, mas seu motivo não pôde ser enviado.",
+        }));
+      });
+    },
+    [incomingCall]
+  );
 
   const onCancel = useCallback(() => {
     if (!outgoingCall) return;
     stopRingtone();
     setNotice((current) => ({ ...current, selfEnded: outgoingCall.id }));
     signalingClient.clearCall(outgoingCall.id);
-    endCall(outgoingCall.id, "cancel");
+    void endCall(outgoingCall.id, "cancel");
   }, [outgoingCall]);
+
+  // ─── Answered from the shell's own window ───────────────────────────────
+  //
+  // With the desktop app closed to the tray there is nothing of ours on
+  // screen, so the shell draws the ring in a small window of its own — and
+  // that window has no session to answer with. It reports the press here, and
+  // this page, which never stopped running, does the actual accepting.
+  useEffect(() => {
+    const bridge = getDesktopBridge();
+    if (!bridge?.onCallAction) return;
+    return bridge.onCallAction((action) => {
+      if (action.action === "accept") void onAccept();
+      else onDecline(action.reason);
+    });
+  }, [onAccept, onDecline]);
 
   if (!account) return null;
 
@@ -263,27 +307,43 @@ export function CallHost() {
   // stand here turned exactly those moments into a crash.
   const other = call ? (isIncoming ? call.from : call.to) : null;
 
+  // What is typed in the refusal box, but only if it belongs to the call on
+  // screen — a second call arriving must not inherit the previous one's text.
+  const reasonText = call && reason?.callId === call.id ? reason.text : "";
+
   return (
     <div
-      // Above every dialog in the app, including the room's own: a call is the
-      // one thing that may interrupt anything.
-      className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex justify-center px-3 pt-3 sm:pt-5"
+      // Centred, and above every dialog in the app including the room's own:
+      // a call is the one thing that may interrupt anything.
+      //
+      // The wrapper itself lets clicks through, so the app behind stays usable
+      // while *you* are the one calling — waiting for an answer is not a
+      // reason to freeze somebody's screen. Being asked is: the incoming ring
+      // lays a backdrop over everything, because there is a question on screen
+      // and it wants answering.
+      className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center p-4"
       role="alert"
       aria-live="assertive"
     >
+      {isIncoming && (
+        <div
+          aria-hidden
+          className="pointer-events-auto absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+        />
+      )}
       {call && other ? (
-        <div className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
-          <div className="flex items-center gap-3 p-4">
+        <div className="pointer-events-auto relative w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
+          <div className="flex flex-col items-center gap-3 px-6 pb-5 pt-7 text-center">
             <UserAvatar
               src={other.avatarUrl}
               name={other.displayName}
-              size={48}
+              size={80}
               // Only the incoming ring pulses. The caller's own screen is a
               // status, not a summons.
               className={isIncoming ? "animate-pulse" : ""}
             />
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold text-zinc-900 dark:text-zinc-100">
+            <div className="w-full min-w-0">
+              <p className="truncate text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                 {other.displayName}
               </p>
               <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">
@@ -292,26 +352,61 @@ export function CallHost() {
             </div>
           </div>
 
-          <div className="flex gap-2 border-t border-zinc-100 p-3 dark:border-zinc-800">
+          <div className="flex flex-col gap-2 border-t border-zinc-100 p-3 dark:border-zinc-800">
             {isIncoming ? (
               <>
-                <button
-                  type="button"
-                  onClick={onDecline}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-100 px-4 py-2.5 font-medium text-zinc-700 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-                >
-                  <MdCallEnd className="h-5 w-5" />
-                  Recusar
-                </button>
-                <button
-                  type="button"
-                  onClick={onAccept}
-                  disabled={busy}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <MdCall className="h-5 w-5" />
-                  Atender
-                </button>
+                {/* Always here, and doing nothing until it is typed in.
+                    "Recusar" reads whatever is in it — empty means a refusal
+                    with no explanation, which is the ordinary case and needs
+                    no extra press to reach.
+
+                    Enter refuses too, so a typed sentence does not then have
+                    to hunt for a button. Shift+Enter breaks a line, which is
+                    why this is a textarea and not an input: five hundred
+                    characters on one scrolling line is a field nobody can
+                    read back. */}
+                <textarea
+                  rows={2}
+                  value={reasonText}
+                  onChange={(event) =>
+                    setReason({ callId: call.id, text: event.target.value.slice(0, 500) })
+                  }
+                  // The ringtone stops at the first keystroke, not on focus: a
+                  // field that is always on screen collects stray focus, and
+                  // silencing the ring because a tab landed there would be a
+                  // call quietly going quiet on its own.
+                  onKeyDown={(event) => {
+                    stopRingtone();
+                    if (event.key !== "Enter" || event.shiftKey) return;
+                    event.preventDefault();
+                    onDecline(reasonText.trim() || undefined);
+                  }}
+                  maxLength={500}
+                  placeholder="Motivo da recusa (opcional)"
+                  aria-label="Motivo da recusa (opcional)"
+                  className="w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-500"
+                />
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onDecline(reasonText.trim() || undefined)}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-100 px-4 py-2.5 font-medium text-zinc-700 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                  >
+                    <MdCallEnd className="h-5 w-5" />
+                    Recusar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onAccept}
+                    disabled={busy}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <MdCall className="h-5 w-5" />
+                    Atender
+                  </button>
+                </div>
+
               </>
             ) : (
               <button
@@ -326,7 +421,7 @@ export function CallHost() {
           </div>
         </div>
       ) : (
-        <div className="pointer-events-auto rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-600 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+        <div className="pointer-events-auto max-w-sm rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-center text-sm text-zinc-600 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
           {noticeText}
         </div>
       )}

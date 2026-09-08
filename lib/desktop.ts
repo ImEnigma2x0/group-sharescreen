@@ -40,6 +40,13 @@ export function desktopOAuthNonce(next: string): string | null {
   return /^[a-zA-Z0-9_-]{8,128}$/.test(nonce) ? nonce : null;
 }
 
+/** Mirrors electron/channels.ts's CallRingingInfo. */
+export interface DesktopRingingCall {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
 /** Mirrors electron/channels.ts's BackgroundSettings. */
 export interface DesktopBackgroundSettings {
   runInBackground: boolean;
@@ -113,10 +120,26 @@ export interface DesktopBridge {
   ): Promise<DesktopBackgroundSettings | null>;
 
   /**
-   * "Somebody is calling" / "they stopped". Brings a window back from the tray
-   * and flashes the taskbar entry; deliberately does not steal focus.
+   * "Somebody is calling" / "they stopped" — null for the second.
+   *
+   * With the window open this only flashes the taskbar entry; the page is
+   * already drawing the ring. With the window closed to the tray it is the
+   * ring: the shell opens a small window of its own in the middle of the
+   * screen, because throwing the whole app back up to ask one question is not
+   * what somebody who closed it wants. Deliberately never steals focus.
    */
-  setCallRinging?(ringing: boolean): void;
+  setCallRinging?(call: DesktopRingingCall | null): void;
+
+  /**
+   * A button pressed in that small window. Returns an unsubscribe function.
+   *
+   * The shell's window has no session and cannot answer anything itself — it
+   * reports the press, and the page acts on it with the connection it has been
+   * holding all along.
+   */
+  onCallAction?(
+    callback: (action: { callId: string; action: string; reason?: string }) => void
+  ): () => void;
 
   /** The version already downloaded and waiting to be applied, or null. */
   pendingUpdate?(): Promise<string | null>;

@@ -1,4 +1,4 @@
-// Builds the desktop shell's three entrypoints.
+// Builds the desktop shell's four entrypoints.
 //
 // esbuild rather than plain `tsc` for one specific reason, learned the hard
 // way: a preload script running with `sandbox: true` gets a *crippled*
@@ -27,6 +27,7 @@ await build({
     path.join(here, "main.ts"),
     path.join(here, "preload.ts"),
     path.join(here, "picker-preload.ts"),
+    path.join(here, "call-overlay-preload.ts"),
   ],
   outdir,
   bundle: true,

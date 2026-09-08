@@ -44,11 +44,12 @@ publish:
 # and not the module tree. Without that line the installer ships all of
 # Next, React, sharp and their native binaries — measured at 278 MB, versus
 # well under one for the shell itself — none of which is ever loaded, since
-# esbuild bundles the three entrypoints and `electron` comes from the
+# esbuild bundles the four entrypoints and `electron` comes from the
 # runtime (see electron/build.mjs).
 files:
   - electron/dist/**/*
   - electron/picker.html
+  - electron/call-overlay.html
   - package.json
   - "!node_modules/**/*"
   # Linux sets the window icon from a file at runtime rather than from the

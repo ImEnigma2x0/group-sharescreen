@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Local file with no remote anything, same posture as picker.html. The
+         avatar arrives as an https URL from our own CDN, which is the one
+         exception this needs over the picker's data:-only rule. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src data: https:; style-src 'unsafe-inline'; script-src 'unsafe-inline';"
+    />
+    <title>Chamada recebida</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        /* Kept in step with the site's dark theme by hand — this page has no
+           Tailwind and no way to read app/globals.css. Same values picker.html
+           uses, plus the two the buttons need. */
+        --bg: #101014;
+        --panel: #1a1a1f;
+        --border: #313139;
+        --text: #fafafa;
+        --muted: #a1a1aa;
+        --accept: #059669;
+        --accept-hover: #10b981;
+        --decline: #3f3f46;
+        --decline-hover: #52525b;
+      }
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 14px;
+        padding: 18px 20px;
+        background: var(--bg);
+        color: var(--text);
+        font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        user-select: none;
+        /* The window is frameless, so this is the only thing giving it an
+           edge against whatever is behind it. */
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      /* The whole window is the drag handle, minus the controls: a frameless
+         window has no title bar to grab, and one that cannot be moved off a
+         full-screen game is one that is in the way. */
+      #who { -webkit-app-region: drag; }
+      button, textarea { -webkit-app-region: no-drag; }
+
+      #who {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+      #avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex: none;
+        background: var(--panel);
+      }
+      #names { min-width: 0; }
+      #name {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #sub {
+        margin: 1px 0 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .row { display: flex; gap: 8px; }
+      .row > button { flex: 1; }
+
+      button {
+        font: inherit;
+        font-weight: 600;
+        color: var(--text);
+        border: 0;
+        border-radius: 9px;
+        padding: 10px 12px;
+        cursor: pointer;
+        transition: background-color 0.12s;
+      }
+      button:focus-visible { outline: 2px solid #fafafa; outline-offset: 2px; }
+      #accept { background: var(--accept); }
+      #accept:hover { background: var(--accept-hover); }
+      #decline { background: var(--decline); }
+      #decline:hover { background: var(--decline-hover); }
+
+      #reason {
+        width: 100%;
+        font: inherit;
+        color: var(--text);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        padding: 8px 10px;
+        resize: none;
+      }
+      #reason:focus { outline: none; border-color: var(--muted); }
+      #reason::placeholder { color: var(--muted); }
+
+      @media (prefers-reduced-motion: reduce) {
+        * { transition: none !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="who">
+      <img id="avatar" alt="" />
+      <div id="names">
+        <p id="name">Chamada recebida</p>
+        <p id="sub">está te ligando…</p>
+      </div>
+    </div>
+
+    <textarea
+      id="reason"
+      rows="2"
+      maxlength="500"
+      placeholder="Motivo da recusa (opcional)"
+      aria-label="Motivo da recusa (opcional)"
+    ></textarea>
+
+    <div class="row" id="buttons">
+      <button id="decline" type="button">Recusar</button>
+      <button id="accept" type="button">Atender</button>
+    </div>
+
+    <script>
+      const overlay = window.callOverlay;
+
+      // Exactly one choice ever leaves this window. Without the latch, a
+      // double-press — easy on a window that appears under the cursor —
+      // sends two, and the second one acts on a call that is already over.
+      let settled = false;
+      function choose(action, reason) {
+        if (settled) return;
+        settled = true;
+        overlay.choose(reason ? { action, reason } : { action });
+      }
+
+      const reasonInput = document.getElementById("reason");
+
+      document.getElementById("accept").addEventListener("click", () => choose("accept"));
+      // Reads whatever is in the box, which is usually nothing — an empty one
+      // is a refusal with no explanation, and that needs no extra press.
+      document.getElementById("decline").addEventListener("click", () =>
+        choose("decline", reasonInput.value.trim())
+      );
+
+      // Enter refuses, Shift+Enter breaks a line: somebody who just typed a
+      // sentence should not have to go find a button for it.
+      reasonInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" || event.shiftKey) return;
+        event.preventDefault();
+        choose("decline", reasonInput.value.trim());
+      });
+
+      // Escape refuses, because a window that appears over what you are doing
+      // has to be dismissible the way every other window is. Deliberately not
+      // "just close it": closing without an answer would leave the caller
+      // listening to a ring nobody is going to pick up.
+      //
+      // It carries the typed reason too — pressing Escape over a written
+      // sentence should not throw the sentence away.
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") choose("decline", reasonInput.value.trim());
+      });
+
+      overlay.data().then((call) => {
+        if (!call) return;
+        document.getElementById("name").textContent = call.name;
+        const avatar = document.getElementById("avatar");
+        if (call.avatarUrl) avatar.src = call.avatarUrl;
+        else avatar.hidden = true;
+      });
+    </script>
+  </body>
+</html>

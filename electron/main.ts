@@ -29,6 +29,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  screen,
   session,
   shell,
   Tray,
@@ -40,6 +41,8 @@ import {
   IPC,
   SYSTEM_AUDIO_ARG,
   VERSION_ARG,
+  type CallOverlayChoice,
+  type CallRingingInfo,
   type PickerAudioApp,
   type PickerChoice,
   type PickerData,
@@ -958,26 +961,161 @@ function createTray() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The ringing window
+// ---------------------------------------------------------------------------
+//
+// Everything about the call itself — who, whether to answer, what happens next
+// — belongs to the website, which is already drawing a ringing screen inside
+// the app (see components/CallHost.tsx). The shell's job is the case that
+// screen cannot cover: the window is closed to the tray, so there is nothing
+// on screen at all.
+//
+// Throwing the whole application back up to ask one question is the wrong
+// answer — somebody closed it on purpose, and a call they decline should leave
+// their desktop exactly as they left it. So main draws the ring itself, in a
+// small frameless window in the middle of the screen, and the app stays where
+// it was unless the call is actually answered.
+//
+// That window has no session, no token and no socket, and is not given any:
+// it reports which button was pressed, and the page behind the hidden window —
+// still running, still holding the connection — does the accepting or
+// refusing. See call-overlay.html.
+
+let callWindow: BrowserWindow | null = null;
+let ringingCall: CallRingingInfo | null = null;
+
+function closeCallWindow() {
+  if (!callWindow) return;
+  const window = callWindow;
+  callWindow = null;
+  if (!window.isDestroyed()) window.close();
+}
+
+function openCallWindow(call: CallRingingInfo) {
+  if (callWindow) return;
+
+  callWindow = new BrowserWindow({
+    width: 360,
+    height: 252,
+    show: false,
+    frame: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    // A first guess only: this centres on the primary monitor, and on a
+    // multi-monitor desk the one being looked at is the one the cursor is on.
+    // centerOnCursorDisplay corrects it before the window is shown, so what
+    // this buys is that a failure there still leaves the window somewhere
+    // sensible rather than at the top-left corner.
+    center: true,
+    alwaysOnTop: true,
+    backgroundColor: "#101014",
+    title: "Chamada recebida",
+    webPreferences: {
+      preload: path.join(__dirname, "call-overlay-preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  callWindow.setMenuBarVisibility(false);
+  // Above full-screen applications too — a game is the case this exists for,
+  // and the ordinary always-on-top level sits below one.
+  callWindow.setAlwaysOnTop(true, "screen-saver");
+  callWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  const window = callWindow;
+  window.once("ready-to-show", () => {
+    // showInactive, not show: the window appears without taking the keyboard
+    // out of whatever is being typed in. A ring interrupts your attention, not
+    // your sentence.
+    window.showInactive();
+    centerOnCursorDisplay(window);
+  });
+  window.on("closed", () => {
+    if (callWindow === window) callWindow = null;
+  });
+  void window.loadFile(path.join(__dirname, "..", "call-overlay.html"));
+}
+
+/** Puts a window in the middle of whichever monitor the cursor is on. */
+function centerOnCursorDisplay(window: BrowserWindow) {
+  try {
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const { x, y, width, height } = display.workArea;
+    const bounds = window.getBounds();
+    window.setBounds({
+      x: Math.round(x + (width - bounds.width) / 2),
+      y: Math.round(y + (height - bounds.height) / 2),
+      width: bounds.width,
+      height: bounds.height,
+    });
+  } catch {
+    // Whatever `center: true` already did stands. A window on the wrong
+    // monitor is a worse ring, not a broken one.
+  }
+}
+
 /**
- * Somebody is calling.
+ * Somebody is calling, or has stopped.
  *
- * Everything about the call itself — who, whether to answer, what happens next
- * — belongs to the website, which is already drawing the ringing screen (see
- * components/CallHost.tsx). What only the shell can do is make sure that
- * screen is somewhere the person can see: a window sitting in the tray, or
- * behind a full-screen game, is one whose "atender" button might as well not
- * exist.
+ * Two different jobs depending on where the app is:
  *
- * Deliberately not `focus()`: stealing focus out of whatever somebody is
- * doing is what a phone ringing gets to do and an application does not. The
- * window is shown and the taskbar entry flashes; bringing it to the front is
- * left to the person, who is the one being asked a question.
+ *   - window open: the page is already drawing the ring, so all the shell adds
+ *     is a flashing taskbar entry for the case it is behind something. Never
+ *     `focus()` — stealing focus out of what somebody is doing is what a phone
+ *     gets to do and an application does not.
+ *   - window closed to the tray: nothing is on screen, so the small window
+ *     above is the ring.
  */
-function setCallRinging(ringing: boolean) {
-  if (!mainWindow) return;
-  if (ringing && !mainWindow.isVisible()) mainWindow.show();
-  mainWindow.flashFrame(ringing);
-  tray?.setToolTip(ringing ? "GoLive — chamada recebida" : "GoLive");
+function setCallRinging(call: CallRingingInfo | null) {
+  ringingCall = call;
+  tray?.setToolTip(call ? "GoLive — chamada recebida" : "GoLive");
+
+  if (!call) {
+    closeCallWindow();
+    mainWindow?.flashFrame(false);
+    return;
+  }
+
+  if (mainWindow && mainWindow.isVisible()) {
+    closeCallWindow();
+    mainWindow.flashFrame(true);
+    return;
+  }
+  openCallWindow(call);
+}
+
+/**
+ * The ring, re-typed out of whatever arrived over IPC.
+ *
+ * Every field is checked rather than trusted, the same way the picker's own
+ * choice is: this comes from a page of remote content, and it decides what a
+ * window on top of everything else says.
+ */
+function readCallInfo(raw: unknown): CallRingingInfo | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.id !== "string" || typeof value.name !== "string") return null;
+  const avatarUrl =
+    typeof value.avatarUrl === "string" && /^https:\/\//.test(value.avatarUrl)
+      ? value.avatarUrl
+      : null;
+  return { id: value.id.slice(0, 128), name: value.name.slice(0, 64), avatarUrl };
+}
+
+function readOverlayChoice(raw: unknown): CallOverlayChoice | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  if (value.action !== "accept" && value.action !== "decline") return null;
+  const reason =
+    value.action === "decline" && typeof value.reason === "string" && value.reason.trim()
+      ? value.reason.trim().slice(0, 500)
+      : undefined;
+  return { action: value.action, ...(reason ? { reason } : {}) };
 }
 
 function safeProtocol(url: string): string {
@@ -1252,10 +1390,31 @@ if (!gotLock) {
       return getBackgroundSettings();
     });
 
-    // A ring, relayed to the shell so the window can come back from the tray.
-    ipcMain.on(IPC.callRinging, (event, ringing: unknown) => {
+    // A ring, relayed to the shell. Origin-checked like the rest: this one
+    // opens a window and puts a name and a face in it, so what it draws comes
+    // from our own page and not from whatever else could be loaded here.
+    ipcMain.on(IPC.callRinging, (event, raw: unknown) => {
       if (!event.sender.getURL().startsWith(APP_ORIGIN)) return;
-      setCallRinging(ringing === true);
+      setCallRinging(readCallInfo(raw));
+    });
+
+    // What the small window is showing. Asked for once, as it opens.
+    ipcMain.handle(IPC.callOverlayData, () => ringingCall);
+
+    // And the button that was pressed there, handed straight to the page —
+    // which is the only side with a session to act with. The window closes
+    // first either way: the answer is given, and leaving it up would let a
+    // second press act on a call that is already over.
+    ipcMain.on(IPC.callOverlayChoose, (_event, raw: unknown) => {
+      const choice = readOverlayChoice(raw);
+      const call = ringingCall;
+      closeCallWindow();
+      if (!choice || !call || !mainWindow) return;
+      // Accepting means walking into a room, which is the one outcome that
+      // does need the whole app back. Refusing leaves the desktop exactly as
+      // it was, which is the point of the small window in the first place.
+      if (choice.action === "accept") focusMainWindow();
+      mainWindow.webContents.send(IPC.callAction, { callId: call.id, ...choice });
     });
 
     // Global keyboard shortcuts management
@@ -1322,6 +1481,9 @@ if (!gotLock) {
   // means it stops while WASAPI can still be shut down cleanly, rather than
   // during the process teardown that follows.
   app.on("will-quit", () => {
+    // Otherwise a quit while the phone is ringing leaves a frameless,
+    // always-on-top window on screen with nothing behind it.
+    closeCallWindow();
     stopSystemAudioCapture();
     globalShortcut.unregisterAll();
   });
@@ -1339,6 +1501,10 @@ if (!gotLock) {
   // to, the last window closing is the end of the process, exactly as before.
   app.on("window-all-closed", () => {
     if (tray) return;
+    // The ringing window is not a window anybody "has open" — it appears by
+    // itself and closes by itself — so it must not be what keeps the app
+    // alive, nor what its closing ends.
+    if (callWindow) return;
     if (process.platform !== "darwin") app.quit();
   });
 }

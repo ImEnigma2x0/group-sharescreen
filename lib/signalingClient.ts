@@ -482,7 +482,7 @@ export type SignalingState = {
   // "declined" and "timeout" say different things to the person who called,
   // and the same reason arriving twice has to be distinguishable from the
   // first one still sitting there.
-  callEnded: { callId: string; reason: string } | null;
+  callEnded: { callId: string; reason: string; note?: string } | null;
   callEndedSeq: number;
   // "Apoiar projeto" hover list (see SupportersTooltip.tsx) — same
   // fetch-over-HTTP-then-live-update shape as partner above, minus the
@@ -1706,10 +1706,15 @@ class SignalingClient {
         const callId = typeof msg.callId === "string" ? msg.callId : null;
         if (!callId) break;
         const reason = typeof msg.reason === "string" ? msg.reason : "failed";
+        // Free text somebody typed to explain a refusal. Clamped again here
+        // rather than trusted from the wire — it is rendered as-is, and the
+        // server's limit is the server's, not a guarantee to this file.
+        const note =
+          typeof msg.note === "string" && msg.note.trim() ? msg.note.trim().slice(0, 500) : undefined;
         this.setState({
           incomingCall: this.state.incomingCall?.id === callId ? null : this.state.incomingCall,
           outgoingCall: this.state.outgoingCall?.id === callId ? null : this.state.outgoingCall,
-          callEnded: { callId, reason },
+          callEnded: { callId, reason, ...(note ? { note } : {}) },
           callEndedSeq: this.state.callEndedSeq + 1,
         });
         break;

@@ -104,13 +104,47 @@ contextBridge.exposeInMainWorld("golive", {
   },
 
   /**
-   * Tells the shell a call is ringing, so a window sitting in the tray comes
-   * back and the taskbar entry flashes. Fire-and-forget, and sent again with
-   * false when the call ends — a window left flashing about a call that is
-   * over is worse than one that never flashed.
+   * Tells the shell who is calling, so it can flash the taskbar entry — or,
+   * when the window is closed to the tray, draw the ring itself in a small
+   * window of its own. Sent again with null when the call ends: a window left
+   * ringing about a call that is over is worse than one that never opened.
    */
-  setCallRinging(ringing: unknown): void {
-    ipcRenderer.send(IPC.callRinging, ringing === true);
+  setCallRinging(call: unknown): void {
+    if (!call || typeof call !== "object") {
+      ipcRenderer.send(IPC.callRinging, null);
+      return;
+    }
+    // Re-built rather than forwarded, so exactly these three fields cross.
+    const value = call as { id?: unknown; name?: unknown; avatarUrl?: unknown };
+    if (typeof value.id !== "string" || typeof value.name !== "string") return;
+    ipcRenderer.send(IPC.callRinging, {
+      id: value.id,
+      name: value.name,
+      avatarUrl: typeof value.avatarUrl === "string" ? value.avatarUrl : null,
+    });
+  },
+
+  /**
+   * Subscribes to a button pressed in that small window. Returns an
+   * unsubscribe function, like onUpdateReady.
+   */
+  onCallAction(callback: unknown): () => void {
+    if (typeof callback !== "function") return () => {};
+    const listener = (_event: unknown, payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const value = payload as { callId?: unknown; action?: unknown; reason?: unknown };
+      if (typeof value.callId !== "string") return;
+      if (value.action !== "accept" && value.action !== "decline") return;
+      (callback as (a: { callId: string; action: string; reason?: string }) => void)({
+        callId: value.callId,
+        action: value.action,
+        ...(typeof value.reason === "string" ? { reason: value.reason } : {}),
+      });
+    };
+    ipcRenderer.on(IPC.callAction, listener);
+    return () => {
+      ipcRenderer.off(IPC.callAction, listener);
+    };
   },
 
   setGlobalShortcuts(shortcuts: unknown): void {

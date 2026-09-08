@@ -101,13 +101,31 @@ export const IPC = {
   /**
    * renderer -> main: somebody is calling, or has stopped calling.
    *
-   * The shell's job on a ring is small but not nothing: bring the window back
-   * from the tray so the answer buttons are actually on screen, and flash the
-   * taskbar entry for the case the person is in something full-screen. Sent
-   * again with `false` the moment the call is over, so a window is not left
-   * flashing about a call that already ended.
+   * Carries who is calling (see CallRingingInfo) rather than a bare boolean,
+   * because the shell now has to be able to *draw* the call: when the window
+   * is closed to the tray, throwing the whole app back on screen to answer one
+   * question is the wrong answer, so main opens a small window with just the
+   * ring in it (see call-overlay.html). It cannot do that without a name and a
+   * face.
+   *
+   * Null the moment the call is over — a window left ringing about a call that
+   * already ended is worse than one that never opened.
    */
   callRinging: "golive:call:ringing",
+  /** overlay -> main: what to show. Asked for once, as the window opens. */
+  callOverlayData: "golive:call:overlay-data",
+  /** overlay -> main: the button that was pressed, and any typed reason. */
+  callOverlayChoose: "golive:call:overlay-choose",
+  /**
+   * main -> renderer: act on what was pressed in that small window.
+   *
+   * The overlay itself does nothing: it has no session, no token and no socket,
+   * and giving it any of those would mean a second copy of the sign-in state
+   * living in the shell. It reports a button press, and the page — which is
+   * still running behind the hidden window, holding the connection it has held
+   * all along — does the actual accepting or refusing.
+   */
+  callAction: "golive:call:action",
 
   /** renderer -> main: register or update global shortcuts map. */
   shortcutsSet: "golive:shortcuts:set",
@@ -140,6 +158,21 @@ export const SYSTEM_AUDIO_FORMAT = {
   channels: 2,
   bitsPerSample: 16,
 } as const;
+
+/** Who is calling, as the small ringing window needs to draw them. */
+export interface CallRingingInfo {
+  /** The call id, echoed back with the choice so a stale window cannot answer. */
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+/** What was pressed in that window. */
+export interface CallOverlayChoice {
+  action: "accept" | "decline";
+  /** The typed refusal, when there was one. Never present on "accept". */
+  reason?: string;
+}
 
 /**
  * The background settings, as the tray and the website both see them.
