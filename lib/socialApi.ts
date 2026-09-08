@@ -18,6 +18,18 @@ export interface SocialUser {
   username: string;
   displayName: string;
   flags: string[];
+  /**
+   * Their picture and equipped name color, so a list of people can be drawn
+   * to look like the same people a room's participant list draws.
+   *
+   * Optional on the type, not on the API: an older deployment answers without
+   * them, and every consumer already has a null path (UserAvatar falls back to
+   * a default face, DisplayUserName to the inherited color) — so a site that
+   * ships ahead of the API degrades to what it drew before instead of
+   * rendering holes.
+   */
+  avatarUrl?: string | null;
+  nameColor?: string | null;
 }
 
 export interface SocialGraph {
@@ -47,6 +59,39 @@ export async function fetchSocialGraph(signal?: AbortSignal): Promise<SocialGrap
     return (await res.json()) as SocialGraph;
   } catch {
     return null;
+  }
+}
+
+/**
+ * A search hit, which is a SocialUser plus where the two of you already stand
+ * — so a result list can offer the one verb that applies instead of offering
+ * "adicionar" for somebody who is already a friend.
+ */
+export interface SocialSearchHit extends SocialUser {
+  relationship: "none" | "friends" | "incoming" | "outgoing";
+}
+
+/**
+ * People matching a username, for the "adicionar" box. Never yourself, and
+ * never anybody either of you blocked (see the API's /social/search).
+ *
+ * An empty list for a failed request as well as for no matches: this runs
+ * while somebody types, and the next keystroke asks again anyway.
+ */
+export async function searchPeople(
+  query: string,
+  signal?: AbortSignal
+): Promise<SocialSearchHit[]> {
+  try {
+    const res = await fetch(
+      `${getSignalingHttpBase()}/social/search?q=${encodeURIComponent(query)}`,
+      { headers: authHeaders(), signal }
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as { results?: SocialSearchHit[] };
+    return data.results ?? [];
+  } catch {
+    return [];
   }
 }
 
