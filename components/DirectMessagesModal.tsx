@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { MdArrowBack, MdClose, MdGif, MdImage, MdReply, MdSend } from "react-icons/md";
+import { MdArrowBack, MdCall, MdClose, MdGif, MdImage, MdReply, MdSend } from "react-icons/md";
 import { GifPicker } from "@/components/GifPicker";
 import { Popover } from "@/components/Tooltip";
 import { ChatImageModal, type ChatImagePreviewState } from "@/components/ChatImageModal";
@@ -15,6 +15,7 @@ import { DisplayUserName } from "@/components/DisplayUserName";
 import { useAuth } from "@/lib/AuthContext";
 import { hasVerifiedBadge, verifiedBadge } from "@/lib/entitlements";
 import { openDirectMessages } from "@/lib/dmWindow";
+import { startCall } from "@/lib/callsApi";
 import { useSignaling } from "@/lib/useSignaling";
 import {
   fetchConversation,
@@ -264,6 +265,22 @@ export function DirectMessagesModal({
           <h2 className="flex-1 truncate text-base font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
             {active?.displayName ?? (activeId ? "Carregando…" : "Mensagens")}
           </h2>
+          {/* Only inside a thread, and only once we know who it is with:
+              "ligar" needs somebody to ring, and the list screen is not a
+              person. The window stays open on purpose — the ringing screen
+              (see components/CallHost) draws above it, and closing this would
+              throw away the conversation the call came out of. */}
+          {activeId && active && (
+            <button
+              type="button"
+              onClick={() => void startCall(activeId)}
+              aria-label={`Ligar para ${active.displayName}`}
+              title={`Ligar para ${active.displayName}`}
+              className="rounded-lg p-1 text-emerald-600 transition hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+            >
+              <MdCall className="h-5 w-5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}

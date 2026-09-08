@@ -17,6 +17,7 @@ import { BUILD_VERSION } from "./buildVersion";
 import { currentAnnouncementDevice } from "./announcement";
 import { getStoredGuestToken, setStoredGuestToken } from "./guestToken";
 import { getInstallId } from "./installId";
+import { getDeviceId } from "./deviceId";
 import { isUserMentionedInMessage, containsBroadcastMention } from "./chatMentions";
 import { showNotification } from "./notifications";
 import { isObsClient } from "./browserEnv";
@@ -316,6 +317,33 @@ export type DirectMessageWire = {
 /** How many delivered messages the buffer above keeps. */
 const RECENT_DM_LIMIT = 100;
 
+/** One of the two people on a call, as the ring carries them. */
+export type CallUserWire = {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  flags: string[];
+};
+
+/**
+ * A call that is ringing. Mirrors the API's WireCall (see its callRoutes.ts).
+ *
+ * Carries *both* people rather than "the other one", so the same object draws
+ * the caller's screen and the callee's without either having to know which end
+ * it is. `roomHandle` is decided when the call starts, not when it is
+ * answered, which is what lets a ring delivered by push already know where it
+ * is going.
+ */
+export type CallWire = {
+  id: string;
+  roomHandle: string;
+  from: CallUserWire;
+  to: CallUserWire;
+  createdAt: number;
+  expiresAt: number;
+};
+
 export type SignalingState = {
   status: SignalingStatus;
   selfId: string | null;
@@ -431,6 +459,31 @@ export type SignalingState = {
   // Bumped when this account marks a conversation read somewhere else, so a
   // badge cleared on one device stops nagging on the others.
   dmReadSeq: number;
+  // The call ringing *at* this account right now, or null.
+  //
+  // At most one, deliberately: a second ring while one is already on screen
+  // replaces it rather than stacking, because two "atender" buttons is a
+  // choice nobody makes correctly under a ringtone. The API refuses to open a
+  // second call between the same two people anyway (see callBetween), so this
+  // only collapses genuinely different callers, and the one that is dropped
+  // is still answerable from the missed-call notification.
+  incomingCall: CallWire | null;
+  // The call this account is placing, or null. Present on *every* device of
+  // the caller, not only the one that pressed the button — hanging up from
+  // the phone in your pocket has to work.
+  outgoingCall: CallWire | null;
+  // A call was answered: the room to walk into. An event, not a state — see
+  // the counter beside it, and note that both sides receive this, which is
+  // what makes "both of us end up in the same room" a single message rather
+  // than a negotiation.
+  callAccepted: { callId: string; roomHandle: string } | null;
+  callAcceptedSeq: number;
+  // A call stopped ringing without being answered, and why. Also an event:
+  // "declined" and "timeout" say different things to the person who called,
+  // and the same reason arriving twice has to be distinguishable from the
+  // first one still sitting there.
+  callEnded: { callId: string; reason: string } | null;
+  callEndedSeq: number;
   // "Apoiar projeto" hover list (see SupportersTooltip.tsx) — same
   // fetch-over-HTTP-then-live-update shape as partner above, minus the
   // "null means nothing to show" ambiguity: an empty array already means
@@ -582,6 +635,12 @@ const initialState: SignalingState = {
   dmSeq: 0,
   recentDms: [],
   dmReadSeq: 0,
+  incomingCall: null,
+  outgoingCall: null,
+  callAccepted: null,
+  callAcceptedSeq: 0,
+  callEnded: null,
+  callEndedSeq: 0,
   supporters: [],
   supportersSeq: 0,
   desktopUpdateSeq: 0,
@@ -874,6 +933,12 @@ class SignalingClient {
   // asking. It is also what keeps a rename — a register sent on an already
   // registered socket — from being able to trip the timeout.
   private registeredSocket: WebSocket | null = null;
+  // Whether the app is currently behind something — see reportAppState, which
+  // is the only writer. Starts false rather than reading the document: this
+  // is constructed during module evaluation, where a `document.hidden` of
+  // true means "the tab was opened in the background and is about to be
+  // looked at", not "the person is elsewhere".
+  private isBackground = false;
 
   state: SignalingState = initialState;
 
@@ -1607,6 +1672,48 @@ class SignalingClient {
       case "dm-read":
         this.setState({ dmReadSeq: this.state.dmReadSeq + 1 });
         break;
+      // ─── Ligações ────────────────────────────────────────────────────
+      //
+      // Four messages and no state machine, because there is barely any state
+      // to machine: a call is ringing or it is not, and the moment it stops
+      // ringing this client's job is either to open a room or to say why not.
+      // Everything after "call-accepted" is the room's, not this file's.
+      case "call-incoming":
+        if (!msg.call) break;
+        this.setState({ incomingCall: msg.call as CallWire });
+        break;
+      case "call-outgoing":
+        if (!msg.call) break;
+        this.setState({ outgoingCall: msg.call as CallWire });
+        break;
+      case "call-accepted": {
+        const callId = typeof msg.callId === "string" ? msg.callId : null;
+        const roomHandle = typeof msg.roomHandle === "string" ? msg.roomHandle : null;
+        if (!callId || !roomHandle) break;
+        this.setState({
+          // Cleared here rather than left for whoever opens the room: the
+          // ringing UI has to come down the instant the call is answered,
+          // including on the *other* devices of both people, which never
+          // navigate anywhere and would otherwise ring forever.
+          incomingCall: this.state.incomingCall?.id === callId ? null : this.state.incomingCall,
+          outgoingCall: this.state.outgoingCall?.id === callId ? null : this.state.outgoingCall,
+          callAccepted: { callId, roomHandle },
+          callAcceptedSeq: this.state.callAcceptedSeq + 1,
+        });
+        break;
+      }
+      case "call-ended": {
+        const callId = typeof msg.callId === "string" ? msg.callId : null;
+        if (!callId) break;
+        const reason = typeof msg.reason === "string" ? msg.reason : "failed";
+        this.setState({
+          incomingCall: this.state.incomingCall?.id === callId ? null : this.state.incomingCall,
+          outgoingCall: this.state.outgoingCall?.id === callId ? null : this.state.outgoingCall,
+          callEnded: { callId, reason },
+          callEndedSeq: this.state.callEndedSeq + 1,
+        });
+        break;
+      }
       case "social-update":
         this.setState({ socialSeq: this.state.socialSeq + 1 });
         break;
@@ -1786,6 +1893,57 @@ class SignalingClient {
     this.rawSend({ type: "presence", path });
   }
 
+  /**
+   * Tell the server whether the app is in front of the person right now.
+   *
+   * Its only consumer is the notification path (see the API's canAlertLocally):
+   * a backgrounded phone has a socket that stays open and a page that is
+   * frozen, so a ring shouted down that socket reaches nobody. Saying so is
+   * what turns it into a push instead.
+   *
+   * Also kept locally, because a reconnect has to be able to re-state it — a
+   * fresh socket that never heard about the background would be treated as
+   * reachable until the next time the person switched apps.
+   */
+  reportAppState(background: boolean) {
+    if (background === this.isBackground) return;
+    this.isBackground = background;
+    this.rawSend({ type: "app-state", background });
+  }
+
+  /**
+   * Adopts what the API says is ringing, for an app that just opened.
+   *
+   * The other half of "the app was closed": a notification is tapped, the app
+   * starts cold, and it reads GET /calls rather than waiting for a socket
+   * message that was sent while nothing was listening. Everything after this
+   * point is the ordinary live path.
+   */
+  adoptCalls(incoming: CallWire | null, outgoing: CallWire | null) {
+    // Never downgrades: a live "call-incoming" that arrived while the HTTP
+    // read was in flight is newer than what that read returned, and letting a
+    // stale empty answer overwrite it would silence a call that is ringing.
+    this.setState({
+      incomingCall: incoming ?? this.state.incomingCall,
+      outgoingCall: outgoing ?? this.state.outgoingCall,
+    });
+  }
+
+  /**
+   * Takes a call off this client's screen without waiting for the server to
+   * say so.
+   *
+   * Pressing "recusar" has to stop the ringtone now, not after a round trip —
+   * and the socket message that confirms it is sent to every device including
+   * this one, so this is only ever racing itself.
+   */
+  clearCall(callId: string) {
+    this.setState({
+      incomingCall: this.state.incomingCall?.id === callId ? null : this.state.incomingCall,
+      outgoingCall: this.state.outgoingCall?.id === callId ? null : this.state.outgoingCall,
+    });
+  }
+
   private sendRegister(name: string) {
     this.rawSend({
       type: "register",
@@ -1799,6 +1957,15 @@ class SignalingClient {
       // the connections a gauge already covers (see lib/installId.ts and the
       // API's appInstallStore.ts).
       installId: getInstallId(),
+      // Which device this is (see lib/deviceId.ts). Present for a browser too,
+      // unlike installId, because the question it answers is asked of every
+      // client: should a notification be *pushed* to this device, or is it
+      // already looking at what arrived?
+      deviceId: getDeviceId(),
+      // Sent with the register rather than only on change, so a connection
+      // that opens while the app is already hidden — a phone reconnecting in
+      // a pocket — is not counted as reachable for as long as it stays there.
+      background: this.isBackground,
       // The route this tab is on, so the server has it from the first
       // moment rather than only after the next navigation (see reportPath).
       path: this.currentPath ?? undefined,

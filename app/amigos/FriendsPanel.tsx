@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { MdBlock, MdCheck, MdClose, MdPersonRemove } from "react-icons/md";
+import { MdBlock, MdCall, MdChatBubbleOutline, MdCheck, MdClose, MdPersonRemove } from "react-icons/md";
 import { DisplayUserName } from "@/components/DisplayUserName";
 import { AccountModal, type AccountModalMode } from "@/components/AccountModal";
 import { useAuth } from "@/lib/AuthContext";
 import { hasVerifiedBadge, verifiedBadge } from "@/lib/entitlements";
 import { acceptFriend, removeFriend, unblockUser, type SocialUser } from "@/lib/socialApi";
 import { useSocialGraph } from "@/lib/useSocialGraph";
+import { openDirectMessages } from "@/lib/dmWindow";
+import { startCall } from "@/lib/callsApi";
 import { useState } from "react";
 
 // The friends page: who you are friends with, who is waiting on you, who you
@@ -81,11 +83,26 @@ export function FriendsPanel() {
   const { graph, loading, refresh } = useSocialGraph();
   const [accountModal, setAccountModal] = useState<AccountModalMode | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // What the last action refused, if it refused.
+  //
+  // Every verb on this page already returned one and nothing showed it, which
+  // was survivable while they were all "remover"/"aceitar" — the list simply
+  // did not change and you could see that. "Ligar" changes nothing visible on
+  // this page at all, so a refusal (they blocked you, the account is gone)
+  // would have been a button that does nothing, silently.
+  const [error, setError] = useState<string | null>(null);
 
-  async function run(userId: string, action: () => Promise<unknown>) {
+  async function run(
+    userId: string,
+    action: () => Promise<{ ok: boolean; error?: string } | unknown>
+  ) {
     if (busyId) return;
     setBusyId(userId);
-    await action();
+    setError(null);
+    const result = (await action()) as { ok?: boolean; error?: string } | undefined;
+    if (result && result.ok === false) setError(result.error ?? "Não foi possível concluir.");
+    // Re-read either way. A failure is often a failure *because* the graph
+    // moved — the same reasoning as components/SocialActions.
     refresh();
     setBusyId(null);
   }
@@ -121,6 +138,15 @@ export function FriendsPanel() {
       <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
         Adicione alguém pelo perfil, ou pela lista de participantes de uma sala.
       </p>
+
+      {error && (
+        <p
+          role="alert"
+          className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+        >
+          {error}
+        </p>
+      )}
 
       {loading ? (
         <p className="mt-6 text-sm text-zinc-500 dark:text-zinc-400">Carregando…</p>
@@ -162,6 +188,33 @@ export function FriendsPanel() {
           >
             {graph.friends.map((user) => (
               <Row key={user.id} user={user}>
+                {/* The two things this page was missing: it lists exactly the
+                    people you would want to reach, and until now the only way
+                    to reach any of them was to open their profile first. */}
+                <button
+                  type="button"
+                  disabled={busyId === user.id}
+                  onClick={() =>
+                    run(user.id, async () => {
+                      const result = await startCall(user.id);
+                      return result.ok ? { ok: true } : { ok: false, error: result.error };
+                    })
+                  }
+                  aria-label={`Ligar para ${user.displayName}`}
+                  className={`${ACTION} border border-emerald-600/40 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500/40 dark:text-emerald-400 dark:hover:bg-emerald-950/40`}
+                >
+                  <MdCall className="h-3.5 w-3.5" />
+                  Ligar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openDirectMessages(user.id)}
+                  aria-label={`Conversar com ${user.displayName}`}
+                  className={`${ACTION} border border-zinc-300 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900`}
+                >
+                  <MdChatBubbleOutline className="h-3.5 w-3.5" />
+                  Mensagem
+                </button>
                 <button
                   type="button"
                   disabled={busyId === user.id}

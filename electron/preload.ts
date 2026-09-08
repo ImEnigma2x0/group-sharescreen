@@ -77,6 +77,42 @@ contextBridge.exposeInMainWorld("golive", {
     ipcRenderer.send(IPC.updateCheck);
   },
 
+  /**
+   * Reads or changes the two settings that decide whether this machine can be
+   * reached with the window closed — see electron/background.ts.
+   *
+   * Both resolve to the settings as they stand *after* the change, so the UI
+   * renders what the OS actually did rather than what it was asked to do:
+   * turning autostart on can fail on a locked-down desktop, and a switch that
+   * moved anyway would be lying.
+   */
+  getBackgroundSettings(): Promise<unknown> {
+    return ipcRenderer.invoke(IPC.backgroundGet);
+  },
+
+  setBackgroundSettings(patch: unknown): Promise<unknown> {
+    if (!patch || typeof patch !== "object") return Promise.resolve(null);
+    const next = patch as { runInBackground?: unknown; openAtLogin?: unknown };
+    // Re-built rather than forwarded: what crosses the bridge is exactly two
+    // booleans, never whatever else the page happened to attach to the object.
+    return ipcRenderer.invoke(IPC.backgroundSet, {
+      ...(typeof next.runInBackground === "boolean"
+        ? { runInBackground: next.runInBackground }
+        : {}),
+      ...(typeof next.openAtLogin === "boolean" ? { openAtLogin: next.openAtLogin } : {}),
+    });
+  },
+
+  /**
+   * Tells the shell a call is ringing, so a window sitting in the tray comes
+   * back and the taskbar entry flashes. Fire-and-forget, and sent again with
+   * false when the call ends — a window left flashing about a call that is
+   * over is worse than one that never flashed.
+   */
+  setCallRinging(ringing: unknown): void {
+    ipcRenderer.send(IPC.callRinging, ringing === true);
+  },
+
   setGlobalShortcuts(shortcuts: unknown): void {
     if (shortcuts && typeof shortcuts === "object") {
       ipcRenderer.send(IPC.shortcutsSet, shortcuts);

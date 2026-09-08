@@ -219,3 +219,60 @@ export function playWarningSound() {
     { freq: 784, start: 0.28, duration: 0.16, type: "square", gain: 0.1 },
   ]);
 }
+
+// ─── Chamadas ─────────────────────────────────────────────────────────────
+//
+// The two sounds here are the only ones in this file that *repeat*, and that
+// is the whole difference between a notification and a ring: a chime says
+// something happened, a ring says somebody is waiting for you right now and
+// keeps saying it until one of you gives up.
+//
+// Both are driven by a plain interval re-firing the same short pattern rather
+// than by a long scheduled score, because a ring has to be stoppable on the
+// exact beat somebody presses "atender" — and Web Audio's scheduled notes,
+// once started, are the one thing that cannot be taken back.
+
+let ringTimer: ReturnType<typeof setInterval> | null = null;
+
+/** The classic two-burst pattern, one cycle. */
+function ringCycle() {
+  playNotes([
+    { freq: 440, start: 0, duration: 0.38, gain: 0.13, type: "triangle" },
+    { freq: 480, start: 0, duration: 0.38, gain: 0.09, type: "sine" },
+    { freq: 440, start: 0.5, duration: 0.38, gain: 0.13, type: "triangle" },
+    { freq: 480, start: 0.5, duration: 0.38, gain: 0.09, type: "sine" },
+  ]);
+}
+
+/** The single low pulse the *caller* hears while the other side rings. */
+function ringbackCycle() {
+  playNotes([{ freq: 392, start: 0, duration: 0.45, gain: 0.07, type: "sine" }]);
+}
+
+/**
+ * Starts ringing, and keeps ringing.
+ *
+ * Idempotent: a second call while one is already going is a no-op rather than
+ * a second overlapping ring, which is what would otherwise happen the moment
+ * two components both decide they are responsible for the sound.
+ *
+ * Respects the global sound switch through playNotes like everything else
+ * here — somebody who turned effects off turned this off too, and the OS
+ * notification (which they did not turn off) is what still reaches them.
+ */
+export function startRingtone(kind: "incoming" | "outgoing" = "incoming") {
+  if (ringTimer) return;
+  const cycle = kind === "incoming" ? ringCycle : ringbackCycle;
+  cycle();
+  // Two seconds between bursts for an incoming ring, four for the caller's
+  // own ringback — the one you are meant to answer should be twice as
+  // insistent as the one you are meant to wait through.
+  ringTimer = setInterval(cycle, kind === "incoming" ? 2000 : 4000);
+}
+
+/** Stops whatever is ringing. Safe to call when nothing is. */
+export function stopRingtone() {
+  if (!ringTimer) return;
+  clearInterval(ringTimer);
+  ringTimer = null;
+}

@@ -27,8 +27,11 @@ import {
   desktopCapturer,
   globalShortcut,
   ipcMain,
+  Menu,
+  nativeImage,
   session,
   shell,
+  Tray,
   type DesktopCapturerSource,
 } from "electron";
 import path from "node:path";
@@ -50,6 +53,14 @@ import {
 // bundles into the main process without dragging the app in with it.
 import { desktopOAuthNonce } from "../lib/desktop";
 import { initAutoUpdater } from "./updater";
+import {
+  applyFirstRunDefaults,
+  getBackgroundSettings,
+  launchedHidden,
+  loginItemSupported,
+  setOpenAtLogin,
+  setRunInBackground,
+} from "./background";
 import { getSavedShareSource, saveShareSource } from "./shareSource.js";
 import {
   getSystemAudioSettings,
@@ -89,6 +100,12 @@ const APP_USER_MODEL_ID = "me.nemtudo.golive";
 const OAUTH_TIMEOUT_MS = 5 * 60_000;
 
 let mainWindow: BrowserWindow | null = null;
+// The tray icon, and the flag that tells a real quit apart from the window
+// being closed. Without the flag, "sair" from the tray menu would be caught by
+// the same close handler that hides the window and the app could never be
+// quit at all.
+let tray: Tray | null = null;
+let quitting = false;
 
 // ---------------------------------------------------------------------------
 // OAuth
@@ -152,6 +169,11 @@ function openRoom(handle: string) {
 function focusMainWindow() {
   if (!mainWindow) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
+  // Hidden is now a state this window is routinely in — closing it puts it
+  // there (see the "close" handler) — and focusing a hidden window brings
+  // nothing to the screen. Every path that means "put the app in front of the
+  // person" comes through here, so this is where that is fixed once.
+  if (!mainWindow.isVisible()) mainWindow.show();
   mainWindow.focus();
 }
 
@@ -809,7 +831,29 @@ function createWindow(initialUrl: string = APP_URL) {
     },
   });
 
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
+  // Not shown when the machine started us at login: the point of starting
+  // with the system is to be *reachable*, not to put a window in front of
+  // somebody who just turned their computer on.
+  mainWindow.once("ready-to-show", () => {
+    if (launchedHidden()) return;
+    mainWindow?.show();
+  });
+
+  // Closing the window is not quitting, unless the person said so.
+  //
+  // This is the load-bearing half of "a call rings with the app closed" on the
+  // desktop (see electron/background.ts for why there is no push alternative):
+  // the window goes away, the renderer keeps running with its socket open, and
+  // the ring arrives over the connection that never went anywhere. The renderer
+  // is deliberately *not* throttled while hidden (see backgroundThrottling in
+  // webPreferences), which is what keeps that connection and its handlers live
+  // rather than clamped to a timer once a second.
+  mainWindow.on("close", (event) => {
+    if (quitting || !getBackgroundSettings().runInBackground) return;
+    event.preventDefault();
+    mainWindow?.hide();
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -833,6 +877,107 @@ function createWindow(initialUrl: string = APP_URL) {
   });
 
   void mainWindow.loadURL(initialUrl);
+}
+
+// ---------------------------------------------------------------------------
+// Tray
+// ---------------------------------------------------------------------------
+//
+// The visible half of running in the background. An application that keeps
+// itself alive after its window is gone, and starts itself with the machine,
+// has to be *findable* — otherwise it is something the user cannot see, cannot
+// reach and cannot switch off, which is a description of malware rather than
+// of a chat app. So: an icon that is always there while the app is, a menu
+// that says what it is doing, and both switches in it.
+
+function buildTrayMenu(): Menu {
+  const settings = getBackgroundSettings();
+  return Menu.buildFromTemplate([
+    {
+      label: "Abrir GoLive",
+      click: () => {
+        if (!mainWindow) createWindow();
+        else focusMainWindow();
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Manter em segundo plano ao fechar",
+      type: "checkbox",
+      checked: settings.runInBackground,
+      click: (item) => {
+        setRunInBackground(item.checked);
+        // Rebuilt rather than mutated: the other item's *enabled* state
+        // depends on this one, and a menu that describes a state it is no
+        // longer in is worse than one that is rebuilt too often.
+        refreshTrayMenu();
+      },
+    },
+    {
+      label: "Abrir com o sistema",
+      type: "checkbox",
+      checked: settings.openAtLogin,
+      enabled: settings.supported,
+      click: (item) => {
+        setOpenAtLogin(item.checked);
+        refreshTrayMenu();
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Sair do GoLive",
+      click: () => {
+        quitting = true;
+        app.quit();
+      },
+    },
+  ]);
+}
+
+function refreshTrayMenu() {
+  tray?.setContextMenu(buildTrayMenu());
+}
+
+function createTray() {
+  if (tray) return;
+  const icon = nativeImage.createFromPath(WINDOW_ICON);
+  // A full-size PNG in a tray is a full-size PNG in a tray on Windows: the OS
+  // scales it badly rather than refusing, and the result looks like a bug.
+  const image = icon.isEmpty() ? icon : icon.resize({ width: 16, height: 16 });
+  tray = new Tray(image);
+  tray.setToolTip("GoLive");
+  tray.setContextMenu(buildTrayMenu());
+  // The gesture everybody tries first. Not wired on macOS, where clicking a
+  // status item is what opens its menu and hijacking that would be wrong.
+  if (process.platform !== "darwin") {
+    tray.on("click", () => {
+      if (!mainWindow) createWindow();
+      else if (mainWindow.isVisible() && mainWindow.isFocused()) mainWindow.hide();
+      else focusMainWindow();
+    });
+  }
+}
+
+/**
+ * Somebody is calling.
+ *
+ * Everything about the call itself — who, whether to answer, what happens next
+ * — belongs to the website, which is already drawing the ringing screen (see
+ * components/CallHost.tsx). What only the shell can do is make sure that
+ * screen is somewhere the person can see: a window sitting in the tray, or
+ * behind a full-screen game, is one whose "atender" button might as well not
+ * exist.
+ *
+ * Deliberately not `focus()`: stealing focus out of whatever somebody is
+ * doing is what a phone ringing gets to do and an application does not. The
+ * window is shown and the taskbar entry flashes; bringing it to the front is
+ * left to the person, who is the one being asked a question.
+ */
+function setCallRinging(ringing: boolean) {
+  if (!mainWindow) return;
+  if (ringing && !mainWindow.isVisible()) mainWindow.show();
+  mainWindow.flashFrame(ringing);
+  tray?.setToolTip(ringing ? "GoLive — chamada recebida" : "GoLive");
 }
 
 function safeProtocol(url: string): string {
@@ -1088,6 +1233,31 @@ if (!gotLock) {
     });
     ipcMain.on(IPC.systemAudioStop, () => stopSystemAudioCapture());
 
+    // The background switches, as the website's settings page reads and
+    // writes them. Origin-checked like every other capability here: these
+    // change how the machine behaves after the app is closed, so they take
+    // their instruction from our own page and not from whatever might one day
+    // be loaded into this window.
+    ipcMain.handle(IPC.backgroundGet, (event) => {
+      if (!event.sender.getURL().startsWith(APP_ORIGIN)) return null;
+      return getBackgroundSettings();
+    });
+    ipcMain.handle(IPC.backgroundSet, (event, patch: unknown) => {
+      if (!event.sender.getURL().startsWith(APP_ORIGIN)) return null;
+      if (!patch || typeof patch !== "object") return getBackgroundSettings();
+      const next = patch as { runInBackground?: unknown; openAtLogin?: unknown };
+      if (typeof next.runInBackground === "boolean") setRunInBackground(next.runInBackground);
+      if (typeof next.openAtLogin === "boolean") setOpenAtLogin(next.openAtLogin);
+      refreshTrayMenu();
+      return getBackgroundSettings();
+    });
+
+    // A ring, relayed to the shell so the window can come back from the tray.
+    ipcMain.on(IPC.callRinging, (event, ringing: unknown) => {
+      if (!event.sender.getURL().startsWith(APP_ORIGIN)) return;
+      setCallRinging(ringing === true);
+    });
+
     // Global keyboard shortcuts management
     ipcMain.on(IPC.shortcutsSet, (_event, shortcuts) => {
       if (shortcuts && typeof shortcuts === "object") {
@@ -1104,6 +1274,16 @@ if (!gotLock) {
     if (initialLink) {
       handleDeepLink(initialLink);
     }
+    // The tray exists for the app's whole life, not only while a window does:
+    // it is the only way back to an app whose window has been closed, and
+    // creating it lazily would mean the one moment it is needed is the one
+    // moment it is not there.
+    createTray();
+    // Autostart, on the very first run only — see applyFirstRunDefaults for
+    // why "only".
+    applyFirstRunDefaults();
+    refreshTrayMenu();
+
     // Read unconditionally, and therefore deleted unconditionally, even when
     // a deep link is about to win: a launch that went somewhere else has
     // answered the question of where this launch belongs, and leaving the
@@ -1146,8 +1326,19 @@ if (!gotLock) {
     globalShortcut.unregisterAll();
   });
 
-  // macOS convention is that closing the window does not quit the app.
+  // A real quit, from the tray menu or from the OS. Read by the window's
+  // "close" handler, which otherwise turns every quit into a hide.
+  app.on("before-quit", () => {
+    quitting = true;
+  });
+
+  // macOS convention is that closing the window does not quit the app — and
+  // with the tray running, that is now the convention on every platform. The
+  // condition is what keeps a user who switched "manter em segundo plano" off
+  // from ending up with an app that cannot be closed: with no tray to go back
+  // to, the last window closing is the end of the process, exactly as before.
   app.on("window-all-closed", () => {
+    if (tray) return;
     if (process.platform !== "darwin") app.quit();
   });
 }

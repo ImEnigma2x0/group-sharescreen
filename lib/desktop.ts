@@ -40,6 +40,13 @@ export function desktopOAuthNonce(next: string): string | null {
   return /^[a-zA-Z0-9_-]{8,128}$/.test(nonce) ? nonce : null;
 }
 
+/** Mirrors electron/channels.ts's BackgroundSettings. */
+export interface DesktopBackgroundSettings {
+  runInBackground: boolean;
+  openAtLogin: boolean;
+  supported: boolean;
+}
+
 export interface DesktopBridge {
   /** The packaged app's version, for the "about"/diagnostics line. */
   readonly appVersion: string;
@@ -88,6 +95,28 @@ export interface DesktopBridge {
    * platforms whose uninstallers cannot run anything.
    */
   reportInstallId?(installId: string): void;
+
+  /**
+   * The two settings that decide whether this machine is reachable with the
+   * window closed: whether closing it leaves the app in the tray, and whether
+   * the app starts with the system.
+   *
+   * They are the desktop's entire substitute for a push service — see
+   * electron/background.ts, which explains why there is no other option — so
+   * a site that finds them absent is talking to a shell from before calls
+   * existed, and should say so rather than silently offering a switch that
+   * does nothing.
+   */
+  getBackgroundSettings?(): Promise<DesktopBackgroundSettings | null>;
+  setBackgroundSettings?(
+    patch: Partial<Pick<DesktopBackgroundSettings, "runInBackground" | "openAtLogin">>
+  ): Promise<DesktopBackgroundSettings | null>;
+
+  /**
+   * "Somebody is calling" / "they stopped". Brings a window back from the tray
+   * and flashes the taskbar entry; deliberately does not steal focus.
+   */
+  setCallRinging?(ringing: boolean): void;
 
   /** The version already downloaded and waiting to be applied, or null. */
   pendingUpdate?(): Promise<string | null>;

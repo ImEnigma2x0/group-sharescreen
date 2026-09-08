@@ -83,6 +83,32 @@ export const IPC = {
    */
   installIdReport: "golive:install-id:report",
 
+  /**
+   * renderer -> main: read the background settings — whether the shell keeps
+   * running in the tray after the window is closed, and whether it starts
+   * with the system.
+   *
+   * The two together are the desktop's *entire* answer to "the ring has to
+   * arrive with the app closed": Electron has no push service, so there is
+   * nothing anybody can send to a desktop app that is not running. What there
+   * can be is an app that is still running — quietly, in the tray, with its
+   * socket open — which is the same thing every other desktop chat app does
+   * and for the same reason.
+   */
+  backgroundGet: "golive:background:get",
+  /** renderer -> main: change one of those settings. */
+  backgroundSet: "golive:background:set",
+  /**
+   * renderer -> main: somebody is calling, or has stopped calling.
+   *
+   * The shell's job on a ring is small but not nothing: bring the window back
+   * from the tray so the answer buttons are actually on screen, and flash the
+   * taskbar entry for the case the person is in something full-screen. Sent
+   * again with `false` the moment the call is over, so a window is not left
+   * flashing about a call that already ended.
+   */
+  callRinging: "golive:call:ringing",
+
   /** renderer -> main: register or update global shortcuts map. */
   shortcutsSet: "golive:shortcuts:set",
   /** main -> renderer: a registered global shortcut fired. */
@@ -114,6 +140,21 @@ export const SYSTEM_AUDIO_FORMAT = {
   channels: 2,
   bitsPerSample: 16,
 } as const;
+
+/**
+ * The background settings, as the tray and the website both see them.
+ *
+ * `supported` is false where the platform has no login-item concept Electron
+ * can drive, and the website hides the switch rather than offering one that
+ * silently does nothing.
+ */
+export interface BackgroundSettings {
+  /** Closing the window leaves the app running in the tray. */
+  runInBackground: boolean;
+  /** The app starts with the system, hidden. */
+  openAtLogin: boolean;
+  supported: boolean;
+}
 
 // Prefix of the argv entry main.ts injects via `additionalArguments` to hand
 // the app version to the sandboxed preload — see preload.ts's readVersion.

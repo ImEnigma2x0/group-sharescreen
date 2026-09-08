@@ -17,6 +17,7 @@ import {
   setNotificationsMuted,
   type NotificationPermissionState,
 } from "./notifications";
+import { ensurePushRegistration } from "./pushRegistration";
 
 export interface UseNotifications {
   supported: boolean;
@@ -87,7 +88,16 @@ export function useNotifications(): UseNotifications {
     const state = await requestNotificationPermission();
     // Asking to enable implies un-muting — otherwise a user who muted, then
     // clicked "enable", would grant permission yet still get nothing.
-    if (state === "granted") setNotificationsMuted(false);
+    if (state === "granted") {
+      setNotificationsMuted(false);
+      // And register this device for notifications that arrive with the app
+      // *closed* (see lib/pushRegistration.ts). Done here rather than in a
+      // second button because there is only one thing a person means by
+      // "ativar notificações", and because permission may only be asked for
+      // inside a user gesture — this call is inside the one that just
+      // succeeded, which is the only moment the browser will allow it.
+      void ensurePushRegistration({ interactive: true });
+    }
     return state;
   }, []);
 

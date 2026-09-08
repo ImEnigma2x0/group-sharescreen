@@ -9,6 +9,8 @@ import { PresenceReporter } from "@/components/PresenceReporter";
 import { SocialNotifier } from "@/components/SocialNotifier";
 import { DmNotifier } from "@/components/DmNotifier";
 import { DirectMessagesHost } from "@/components/DirectMessagesHost";
+import { CallHost } from "@/components/CallHost";
+import { PushRegistrar } from "@/components/PushRegistrar";
 import { ProModalHost } from "@/components/ProModalHost";
 import { NtPopups } from "@/components/NtPopups";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
@@ -212,6 +214,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <DmNotifier />
               {/* The one conversation window on the page — see its own comment. */}
               <DirectMessagesHost />
+              {/* The ringing screen, both directions. At the root for the same
+                  reason the bell is: a call arrives whenever it arrives, and
+                  it has to be answerable from whatever page somebody is on. */}
+              <CallHost />
+              {/* Renders nothing; it is what makes a notification arrive with
+                  the app closed — see components/PushRegistrar.tsx. */}
+              <PushRegistrar />
               {/* GoLive Pro subscription modal */}
               <ProModalHost />
               <AnnouncementBanner />

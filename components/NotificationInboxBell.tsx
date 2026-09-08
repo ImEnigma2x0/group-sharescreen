@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MdChatBubbleOutline, MdNotificationsNone, MdPersonAdd } from "react-icons/md";
+import { useNotifications } from "@/lib/useNotifications";
 import { FriendRequestsModal } from "@/components/FriendRequestsModal";
 import { openDirectMessages } from "@/lib/dmWindow";
 import { Popover } from "@/components/Tooltip";
@@ -78,6 +79,7 @@ export function NotificationInboxBell({ className = "" }: { className?: string }
   // FriendRequestsModal.
   const [requestsOpen, setRequestsOpen] = useState(false);
   const unread = items.filter((item) => !item.read).length;
+  const { supported, permission, enable } = useNotifications();
 
   return (
     <>
@@ -100,6 +102,30 @@ export function NotificationInboxBell({ className = "" }: { className?: string }
               </button>
             )}
           </div>
+          {/* The one place on every page where notifications can actually be
+              turned on.
+              The permission toggle used to live only in a room's chat header
+              (components/NotificationBell), which meant somebody who never
+              opened a room never had the chance to say yes — and being
+              notified with the app closed is worth most precisely to the
+              people who are *not* in a room. Shown only while there is
+              something to gain by pressing it: absent once permission is
+              granted, and absent where the browser blocked it, since that is
+              undone in site settings and not here.
+
+              This is also what registers the device for push, because asking
+              is only allowed inside a user gesture and this is the gesture —
+              see lib/useNotifications.ts's enable. */}
+          {supported && permission === "default" && (
+            <button
+              type="button"
+              onClick={() => void enable()}
+              className="mb-1 flex w-full items-center gap-2 rounded-lg bg-zinc-100 px-2 py-2 text-left text-xs font-medium text-zinc-700 transition hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              <MdNotificationsNone className="h-4 w-4 shrink-0" />
+              Ativar notificações neste aparelho
+            </button>
+          )}
           {items.length === 0 ? (
             <p className="px-2 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
               Nada por aqui ainda.

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   MdBlock,
+  MdCall,
   MdChatBubbleOutline,
   MdCheck,
   MdClose,
@@ -18,6 +19,7 @@ import {
   unblockUser,
 } from "@/lib/socialApi";
 import { openDirectMessages } from "@/lib/dmWindow";
+import { startCall } from "@/lib/callsApi";
 import { relationshipWith, useSocialGraph } from "@/lib/useSocialGraph";
 
 // The friend/block controls for one person, wherever that person is shown.
@@ -103,6 +105,30 @@ export function SocialActions({
             >
               <MdChatBubbleOutline className="h-4 w-4 shrink-0" />
               Mensagem
+            </button>
+
+            {/* Calling is gated exactly like messaging: a block refuses it and
+                a friendship is not required (see the API's callRoutes). The
+                ring itself is not this component's business — the request
+                either starts one or says why it could not, and CallHost at the
+                layout root draws everything after that. */}
+            <button
+              type="button"
+              disabled={busy}
+              // Deliberately without onLeave: unlike "mensagem", this opens
+              // nothing that the profile card would be in front of, and
+              // closing the card would take the error message with it on the
+              // one path where there is something to say.
+              onClick={() =>
+                void run(async () => {
+                  const result = await startCall(userId);
+                  return result.ok ? { ok: true } : { ok: false, error: result.error };
+                })
+              }
+              className={`${buttonBase} border border-emerald-600/40 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500/40 dark:text-emerald-400 dark:hover:bg-emerald-950/40`}
+            >
+              <MdCall className="h-4 w-4 shrink-0" />
+              Ligar
             </button>
 
             {relationship === "none" && (

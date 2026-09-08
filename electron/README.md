@@ -13,7 +13,7 @@ working, and a shipped app that never falls behind the website.
 
 ## What the shell actually adds
 
-Four things, and everything in `main.ts` exists for one of them:
+Five things, and everything in `main.ts` exists for one of them:
 
 1. **A screen picker.** Electron does not implement `getDisplayMedia`'s own
    chooser. Without `setDisplayMediaRequestHandler` the app's single most
@@ -33,9 +33,46 @@ Four things, and everything in `main.ts` exists for one of them:
    share being watched — and sends it back to the room, so everyone hears
    themselves a beat late. `native/golive-audiocap.exe` captures the mix with
    our own process tree excluded instead. Windows only; see below.
-4. **The security posture remote content requires.** No Node in the renderer,
+4. **Being reachable with the window closed.** Closing the window hides it to
+   the tray instead of quitting, and the app starts with the system. That
+   sounds like a preference and is not: it is the desktop's *entire* answer to
+   "uma ligação tem que tocar mesmo com o app fechado", because Electron has no
+   push service — there is no message anybody can send to a desktop
+   application that is not running. What there can be is an application that
+   is still running, quietly, with its socket open, which is what every other
+   desktop chat app does and for the same reason. See `background.ts`.
+5. **The security posture remote content requires.** No Node in the renderer,
    no navigating away from our own origin, no in-app windows for third-party
    links.
+
+## Segundo plano, bandeja e chamadas
+
+Two settings, both visible and reversible from the tray menu, both defaulting
+to on:
+
+| Setting | Sem ela |
+| --- | --- |
+| **Manter em segundo plano ao fechar** | O app acaba no momento em que alguém aperta o X, e nenhuma outra coisa traz um toque até ele |
+| **Abrir com o sistema** | A anterior só ajuda até o próximo boot |
+
+Autostart é ligado **na primeira execução e nunca mais** (`applyFirstRunDefaults`).
+Um padrão que se reaplica a cada abertura desfaz em silêncio a decisão de quem
+o desligou, e aí não é mais um padrão — é recusar-se a aceitar um não.
+
+Um app que se mantém vivo depois que a janela sumiu e que se inicia sozinho
+precisa ser *encontrável*, senão é algo que a pessoa não vê, não alcança e não
+consegue desligar — o que descreve malware, não um app de conversa. Por isso o
+ícone na bandeja existe enquanto o app existir, e as duas chaves estão no menu
+dele.
+
+Quando alguém liga, o site manda `IPC.callRinging` e o shell faz a única coisa
+que só ele pode fazer: tira a janela da bandeja e pisca a entrada na barra de
+tarefas. Deliberadamente **não** rouba o foco — isso um telefone tocando pode
+fazer, um aplicativo não. Quem está sendo perguntado é quem decide olhar.
+
+O renderer não é estrangulado enquanto escondido (`backgroundThrottling: false`
+em `webPreferences`, que já estava lá pelos atalhos globais), e é isso que
+mantém o socket e os handlers vivos em vez de limitados a um timer por segundo.
 
 ## The OAuth handoff
 
