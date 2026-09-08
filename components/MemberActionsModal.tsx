@@ -4,7 +4,7 @@ import { useState } from "react";
 import { MdGavel, MdLogout } from "react-icons/md";
 import { signalingClient } from "@/lib/signalingClient";
 import { DisplayUserName } from "./DisplayUserName";
-import type { VerifiedBadge } from "@/lib/entitlements";
+import type { VerifiedTone } from "@/lib/entitlements";
 
 export type MemberActions = {
   // The stable user id (see the server's stableUserId) — what every room
@@ -14,7 +14,7 @@ export type MemberActions = {
   userId: string;
   name: string;
   isGuest?: boolean;
-  verified?: VerifiedBadge | boolean;
+  verified?: VerifiedTone | boolean;
   nameColor?: string | null;
   // What this viewer may do to them, decided by the caller — which is the
   // only place that knows both who is asking and who the room's owner and

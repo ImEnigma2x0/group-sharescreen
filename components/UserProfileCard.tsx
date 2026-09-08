@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { fetchUserProfile, formatDuration, type UserProfile } from "@/lib/userProfile";
-import { VerifiedBadgeIcon, MicIcon, ScreenIcon } from "@/components/icons";
+import { MicIcon, ScreenIcon } from "@/components/icons";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { BsCoin, BsClock, BsShop } from "react-icons/bs";
-import { hasVerifiedBadge } from "@/lib/entitlements";
 import { SocialActions } from "@/components/SocialActions";
 import { useAuth } from "@/lib/AuthContext";
 import { useSignaling } from "@/lib/useSignaling";
@@ -416,7 +416,6 @@ function ProfileContent({
     }
   }
 
-  const verified = hasVerifiedBadge(account?.flags);
   const memberSince = new Date(account.createdAt).toLocaleDateString("pt-BR", {
     month: "long",
     year: "numeric",
@@ -730,7 +729,7 @@ function ProfileContent({
                   <span style={account.equippedNameColor ? { color: account.equippedNameColor } : undefined}>
                     {account.displayName}
                   </span>
-                  {verified && <VerifiedBadgeIcon className="h-6 w-6 shrink-0 text-blue-500" />}
+                  <VerifiedBadge flags={account?.flags} className="h-6 w-6 shrink-0" />
                 </h1>
                 <div className="flex flex-wrap items-center gap-2 mt-0.5">
                   <p className="text-sm text-zinc-500 dark:text-zinc-400">@{account.username}</p>

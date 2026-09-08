@@ -1,5 +1,5 @@
-import { GoldVerifiedBadgeIcon, VerifiedBadgeIcon } from "./icons";
-import type { VerifiedBadge } from "@/lib/entitlements";
+import { VerifiedBadge } from "./VerifiedBadge";
+import type { VerifiedTone } from "@/lib/entitlements";
 import { Tooltip } from "./Tooltip";
 
 // Single place that renders a person's display name — every "name" shown
@@ -24,7 +24,7 @@ export function DisplayUserName({
   // `boolean` is still accepted because a couple of callers receive the
   // answer as one through their own props; true renders the blue mark, which
   // is what it always meant.
-  verified?: VerifiedBadge | boolean;
+  verified?: VerifiedTone | boolean;
   // Cosmetics-store name color (see PeerInfo.nameColor / lib/cosmetics.ts) —
   // a hex value applied to the name text itself. Undefined/null for no
   // color equipped, which leaves the name at whatever color its container
@@ -40,14 +40,16 @@ export function DisplayUserName({
   return (
     <span className={className} style={{ display: "flex" }}>
       <span style={color ? { color } : undefined}>{name}</span>
-      {/* A different component, not a different colour: the gold mark has its
-          own artwork and its own gradients, so tinting the blue one would
-          have produced a shape that is not the badge people recognise. */}
-      {verified === "gold" ? (
-        <GoldVerifiedBadgeIcon className="ml-1 inline h-5.5 w-5.5 shrink-0 align-text-top" />
-      ) : verified ? (
-        <VerifiedBadgeIcon className="ml-1 inline h-5.5 w-5.5 shrink-0 align-text-top text-blue-500" />
-      ) : null}
+      {/* One shared component decides which mark, so this and the profile
+          page cannot disagree about what somebody bought — see
+          components/VerifiedBadge. `true` from a caller that only has a
+          boolean still means the blue one, as it always did. */}
+      {verified && (
+        <VerifiedBadge
+          flags={verified === "gold" ? ["PRO_MAX"] : ["VERIFIED"]}
+          className="ml-1 inline h-5.5 w-5.5 shrink-0 align-text-top"
+        />
+      )}
       {isGuest && <span className="font-normal text-zinc-500" style={{ marginLeft: "4px" }}>(guest)</span>}
       {connectionLost && (
         <Tooltip content="Conexão perdida com essa pessoa — tentando reconectar">

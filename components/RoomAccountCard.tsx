@@ -8,10 +8,10 @@ import { useAuth } from "@/lib/AuthContext";
 import { useSignaling } from "@/lib/useSignaling";
 import { trackEvent } from "@/lib/analytics";
 import { Tooltip } from "@/components/Tooltip";
-import { VerifiedBadgeIcon, ObsSourceIcon } from "@/components/icons";
+import { ObsSourceIcon } from "@/components/icons";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { BetaMark } from "@/components/BetaMark";
 import { DEFAULT_AVATAR_PATH } from "@/components/UserAvatar";
-import { hasVerifiedBadge } from "@/lib/entitlements";
 
 // Who you are, at the foot of the room's chat column (see WatchRoom, from lg
 // up). It used to be a chip wedged into the header between "Compartilhar
@@ -60,7 +60,6 @@ export function RoomAccountCard({
 
   const isAccount = Boolean(account);
   const initial = state.name.trim().slice(0, 1).toUpperCase();
-  const verified = hasVerifiedBadge(state.account?.flags);
 
   // Same rule as AccountMenu: a signed-in account with no picture gets the
   // first default, a guest keeps the coloured initial that says so.
@@ -95,7 +94,7 @@ export function RoomAccountCard({
         >
           {state.name}
         </span>
-        {verified && <VerifiedBadgeIcon className="h-4 w-4 shrink-0 text-blue-500" />}
+        <VerifiedBadge flags={state.account?.flags} className="h-4 w-4 shrink-0" />
       </span>
       {/* The second line is the first thing to go when the card has to be
           short: "@fulano" is context, and the name above it is the point. */}

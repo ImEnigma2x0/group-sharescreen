@@ -81,9 +81,9 @@ export function hasVerifiedBadge(flags: readonly string[] | undefined | null): b
  * matching them (see its entitlements.ts). Testing PRO first would make gold
  * unreachable.
  */
-export type VerifiedBadge = "blue" | "gold" | null;
+export type VerifiedTone = "blue" | "gold" | null;
 
-export function verifiedBadge(flags: readonly string[] | undefined | null): VerifiedBadge {
+export function verifiedBadge(flags: readonly string[] | undefined | null): VerifiedTone {
   if (!flags) return null;
   if (flags.includes("PRO_MAX")) return "gold";
   if (flags.includes("VERIFIED") || flags.includes("PRO")) return "blue";
