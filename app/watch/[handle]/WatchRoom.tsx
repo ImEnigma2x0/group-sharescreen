@@ -185,7 +185,7 @@ import {
 import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
 import { ObsBrowserSourceModal } from "@/components/ObsBrowserSourceModal";
 import { ShortcutQuickPopover } from "@/components/ShortcutQuickPopover";
-import { hasVerifiedBadge } from "@/lib/entitlements";
+import { hasVerifiedBadge, verifiedBadge } from "@/lib/entitlements";
 
 // Mirrors server/signaling.ts's HANDLE_RE — must match exactly, or a name
 // this lets through but the server rejects lands the user in a dead room
@@ -3336,7 +3336,7 @@ export function WatchRoom({ handle }: { handle: string }) {
             <DisplayUserName
               name={peer?.name ?? "Alguém"}
               isGuest={peer?.isGuest}
-              verified={hasVerifiedBadge(peer?.flags)}
+              verified={verifiedBadge(peer?.flags)}
               color={peer?.nameColor}
             />
           }
@@ -3381,7 +3381,7 @@ export function WatchRoom({ handle }: { handle: string }) {
             <DisplayUserName
               name={peer?.name ?? "Alguém"}
               isGuest={peer?.isGuest}
-              verified={hasVerifiedBadge(peer?.flags)}
+              verified={verifiedBadge(peer?.flags)}
               color={peer?.nameColor}
             />
           }
@@ -4333,7 +4333,7 @@ export function WatchRoom({ handle }: { handle: string }) {
         isAdmin={isRoomAdmin}
         isApp={mounted && isDesktopApp() && !isMobileApp()}
         isMobileApp={mounted && isMobileApp()}
-        verified={hasVerifiedBadge(state.account?.flags)}
+        verified={verifiedBadge(state.account?.flags)}
         nameColor={account?.equippedNameColor}
         micOn={isMicOn}
         sharing={isSharing}
@@ -4371,7 +4371,7 @@ export function WatchRoom({ handle }: { handle: string }) {
             isAdmin={state.roomAdmins.some((a) => a.id === p.userId)}
             isApp={p.app}
             isMobileApp={p.mobileApp}
-            verified={hasVerifiedBadge(p?.flags)}
+            verified={verifiedBadge(p?.flags)}
             nameColor={p.nameColor}
             micOn={p.mic}
             sharing={p.sharing}

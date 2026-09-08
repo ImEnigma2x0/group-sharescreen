@@ -65,8 +65,29 @@ export const FEATURE_TIERS: Record<Feature, FeatureTier> = {
  * before this existed.
  */
 export function hasVerifiedBadge(flags: readonly string[] | undefined | null): boolean {
-  if (!flags) return false;
-  return flags.includes("VERIFIED") || flags.includes("PRO");
+  return verifiedBadge(flags) !== null;
+}
+
+/**
+ * Which mark to draw, or null for none.
+ *
+ * Gold is the top plan's, blue is everybody else's who has one. Returning the
+ * *tone* rather than a boolean is what keeps the two from drifting: a caller
+ * cannot render a badge without having been told which one, so a new rung
+ * added here reaches every name in the app at once.
+ *
+ * PRO_MAX is checked first because a Pro Max subscriber carries PRO as well —
+ * the API publishes both, so that every rule written against PRO keeps
+ * matching them (see its entitlements.ts). Testing PRO first would make gold
+ * unreachable.
+ */
+export type VerifiedBadge = "blue" | "gold" | null;
+
+export function verifiedBadge(flags: readonly string[] | undefined | null): VerifiedBadge {
+  if (!flags) return null;
+  if (flags.includes("PRO_MAX")) return "gold";
+  if (flags.includes("VERIFIED") || flags.includes("PRO")) return "blue";
+  return null;
 }
 
 /**

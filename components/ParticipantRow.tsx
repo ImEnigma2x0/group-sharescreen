@@ -18,6 +18,7 @@ import {
 import { FaCrown } from "react-icons/fa";
 import { VolumeSlider } from "./VolumeSlider";
 import { DisplayUserName } from "./DisplayUserName";
+import type { VerifiedBadge } from "@/lib/entitlements";
 import { UserAvatar } from "./UserAvatar";
 import { Tooltip, Popover } from "./Tooltip";
 import { MAX_GAIN } from "@/lib/audioGain";
@@ -86,7 +87,8 @@ export function ParticipantRow({
   // This peer's audio peer connection is down (failed/disconnected) while we
   // still expect one — see useRoomMedia's recvConnectionStates.
   connectionLost?: boolean;
-  verified?: boolean;
+  // Forwarded straight to DisplayUserName — see its `verified` prop.
+  verified?: VerifiedBadge | boolean;
   // Cosmetics-store name color (see PeerInfo.nameColor) — undefined/null for
   // none equipped.
   nameColor?: string | null;

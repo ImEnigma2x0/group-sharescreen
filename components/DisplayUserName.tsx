@@ -1,4 +1,5 @@
 import { VerifiedBadgeIcon } from "./icons";
+import type { VerifiedBadge } from "@/lib/entitlements";
 import { Tooltip } from "./Tooltip";
 
 // Single place that renders a person's display name — every "name" shown
@@ -16,9 +17,14 @@ export function DisplayUserName({
 }: {
   name: string;
   isGuest?: boolean;
-  // Account has the "VERIFIED" flag (see RegisteredAccount.flags /
-  // PeerInfo.flags) — never true for a guest.
-  verified?: boolean;
+  // Which verified mark this person carries, from lib/entitlements'
+  // verifiedBadge — "gold" for the top plan, "blue" for everyone else with
+  // one, null/false for none. Never set for a guest.
+  //
+  // `boolean` is still accepted because a couple of callers receive the
+  // answer as one through their own props; true renders the blue mark, which
+  // is what it always meant.
+  verified?: VerifiedBadge | boolean;
   // Cosmetics-store name color (see PeerInfo.nameColor / lib/cosmetics.ts) —
   // a hex value applied to the name text itself. Undefined/null for no
   // color equipped, which leaves the name at whatever color its container
@@ -36,7 +42,9 @@ export function DisplayUserName({
       <span style={color ? { color } : undefined}>{name}</span>
       {verified && (
         <VerifiedBadgeIcon
-          className="ml-1 inline h-5.5 w-5.5 shrink-0 align-text-top text-blue-500"
+          className={`ml-1 inline h-5.5 w-5.5 shrink-0 align-text-top ${
+            verified === "gold" ? "text-amber-400" : "text-blue-500"
+          }`}
         />
       )}
       {isGuest && <span className="font-normal text-zinc-500" style={{ marginLeft: "4px" }}>(guest)</span>}

@@ -18,7 +18,7 @@ import { VerifiedBadgeIcon } from "@/components/icons";
 //     character. It is a compromise and it is written down here rather than
 //     inline at the call site, so the two never drift into different marks.
 
-export type PlanIconId = "blue_verified";
+export type PlanIconId = "blue_verified" | "gold_verified";
 
 export interface PlanIcon {
   Icon: (props: { className?: string }) => React.ReactElement;
@@ -36,6 +36,15 @@ export const PLAN_ICONS: Record<PlanIconId, PlanIcon> = {
     className: "text-blue-500",
     glyph: "✔",
     label: "Verificado",
+  },
+  // The same mark in the top plan's colour. Kept in step with the badge that
+  // plan's subscribers wear beside their name — see lib/entitlements'
+  // verifiedBadge, which is what decides gold there.
+  gold_verified: {
+    Icon: VerifiedBadgeIcon,
+    className: "text-amber-400",
+    glyph: "✔",
+    label: "Verificado Pro Max",
   },
 };
 

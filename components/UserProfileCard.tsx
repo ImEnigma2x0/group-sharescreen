@@ -64,6 +64,21 @@ function StatCard({
  * page has nowhere to go and leaves it out; the dialog uses it to close
  * itself, so a click does not leave a modal hanging over the destination.
  */
+/**
+ * The one place the "Pro Max" upsell is written, so both the avatar row and
+ * the banner row say the same thing and lead to the same page.
+ */
+function ProMaxLink() {
+  return (
+    <Link
+      href="/pro"
+      className="text-xs text-zinc-500 underline underline-offset-2 transition hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+    >
+      Exclusivo do Pro Max.
+    </Link>
+  );
+}
+
 /** One row of pickable avatars, or the same row shown as a locked preview. */
 function AvatarRow({
   label,
@@ -526,9 +541,7 @@ function ProfileContent({
                   </button>
                 )}
                 {!canUploadBanner && (
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    Exclusivo do Pro Max.
-                  </span>
+                  <ProMaxLink />
                 )}
               </div>
             </div>
@@ -572,9 +585,7 @@ function ProfileContent({
                     Enviar minha imagem
                   </button>
                   {!avatarOptions.canUpload && (
-                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                      Exclusivo do Pro Max.
-                    </span>
+                      <ProMaxLink />
                   )}
                 </div>
               </div>

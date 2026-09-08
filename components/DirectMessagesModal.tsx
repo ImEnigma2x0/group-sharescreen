@@ -12,7 +12,7 @@ import {
 } from "@/lib/chatImage";
 import { DisplayUserName } from "@/components/DisplayUserName";
 import { useAuth } from "@/lib/AuthContext";
-import { hasVerifiedBadge } from "@/lib/entitlements";
+import { hasVerifiedBadge, verifiedBadge } from "@/lib/entitlements";
 import { openDirectMessages } from "@/lib/dmWindow";
 import { useSignaling } from "@/lib/useSignaling";
 import {
@@ -290,7 +290,7 @@ export function DirectMessagesModal({
                       <span className="min-w-0 flex-1">
                         <DisplayUserName
                           name={conversation.user.displayName}
-                          verified={hasVerifiedBadge(conversation.user.flags)}
+                          verified={verifiedBadge(conversation.user.flags)}
                           className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
                         />
                         <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">

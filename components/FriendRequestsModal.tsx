@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { MdCheck, MdClose } from "react-icons/md";
 import { DisplayUserName } from "@/components/DisplayUserName";
-import { hasVerifiedBadge } from "@/lib/entitlements";
+import { hasVerifiedBadge, verifiedBadge } from "@/lib/entitlements";
 import { acceptFriend, removeFriend } from "@/lib/socialApi";
 import { useSocialGraph } from "@/lib/useSocialGraph";
 
@@ -85,7 +85,7 @@ export function FriendRequestsModal({ open, onClose }: { open: boolean; onClose:
                 <span className="min-w-0 flex-1">
                   <DisplayUserName
                     name={user.displayName}
-                    verified={hasVerifiedBadge(user.flags)}
+                    verified={verifiedBadge(user.flags)}
                     className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
                   />
                   <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
