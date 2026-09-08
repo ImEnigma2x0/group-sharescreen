@@ -217,19 +217,29 @@ function fillProbeScript(timeoutMs: number): string {
       "*"
     );
   }
+  // The creative, as one box.
+  //
+  // Deliberately the largest single element by area, not the widest width
+  // paired with the tallest height: those two maxima routinely come from
+  // different nodes — the creative's own iframe and some wrapper the tag
+  // leaves lying around — and pairing them invents a rectangle that nothing
+  // on the page ever drew. A 728x90 banner reported back as 728x250 that way,
+  // and the slot around it dutifully grew into the square hole the number
+  // described.
   function measureSize() {
     var nodes = document.body.querySelectorAll("iframe,img,a,div,ins,span,canvas");
-    var maxW = 0;
-    var maxH = 0;
+    var best = null;
+    var bestArea = 0;
     for (var i = 0; i < nodes.length; i++) {
       var box = nodes[i].getBoundingClientRect();
-      if (box.width > maxW) maxW = box.width;
-      if (box.height > maxH) maxH = box.height;
+      if (box.width <= 1 || box.height <= 1) continue;
+      var area = box.width * box.height;
+      if (area > bestArea) {
+        bestArea = area;
+        best = { width: Math.round(box.width), height: Math.round(box.height) };
+      }
     }
-    if (maxW > 1 && maxH > 1) {
-      return { width: Math.round(maxW), height: Math.round(maxH) };
-    }
-    return null;
+    return best;
   }
   var deadline = Date.now() + ${timeoutMs};
   var timer = setInterval(function () {

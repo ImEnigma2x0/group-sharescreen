@@ -101,8 +101,16 @@ export function AdsterraBanner({
 
   if (!rendering || !unit) return null;
 
-  const displayWidth = renderedSize ? renderedSize.width : unit.width;
-  const displayHeight = renderedSize ? renderedSize.height : unit.height;
+  // What the frame measured, but never bigger than the unit this slot
+  // declared. The declared size is the shape the slot *is* — 728x90 on the
+  // home page, 300x250 in a room — and it is the space the layout already
+  // reserved, so letting a measurement grow the box is the page-shifting this
+  // component exists to avoid, and is how the home page's horizontal banner
+  // ended up as a square. Shrinking is still allowed: a creative smaller than
+  // the unit leaves dead space otherwise, which is the case renderedSize was
+  // added for.
+  const displayWidth = renderedSize ? Math.min(renderedSize.width, unit.width) : unit.width;
+  const displayHeight = renderedSize ? Math.min(renderedSize.height, unit.height) : unit.height;
 
   return (
     <div className={`flex flex-col items-center gap-1 ${className}`}>
