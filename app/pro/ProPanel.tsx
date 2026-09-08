@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { MdCheck, MdClose, MdLock } from "react-icons/md";
+import { BsCoin } from "react-icons/bs";
 // No wrapperClassName: Tippy then attaches straight to the <li>, keeping the
 // list a plain <ul><li> instead of nesting a <span> between them.
 import { Tooltip } from "@/components/Tooltip";
@@ -188,23 +189,25 @@ export function ProPanel() {
   // ends the old mandate when the new payment lands.
   const liveCardSub = active && !viaPix && !cancelled;
 
-  // Every benefit any plan sells, split into what this one includes and what
-  // it does not — the second group is drawn last, after the points, so the
-  // card reads as "everything you get" and then "what the other plan adds".
-  // Interleaving them (which is what listing them in one fixed order did) put
-  // greyed-out rows in the middle of the perks somebody is paying for.
+  // Every benefit any plan sells, in one fixed order — FEATURE_LABELS's.
   //
-  // Within each group the order is FEATURE_LABELS's, so the sequence of the
-  // perks themselves is still the same on every card.
+  // Not grouped into "included" then "missing", which was tried and was
+  // wrong: how many rows land in each group depends on the plan, so every row
+  // after them moved when you switched plans, and the points rows moved most
+  // of all. A single order means a benefit sits at the same height on every
+  // card, which is what makes two cards comparable at a glance.
   const sellableFeatures = (Object.keys(FEATURE_LABELS) as Feature[]).filter((feature) =>
     plans.some((entry) => entry.features.includes(feature))
   );
-  const includedFeatures = sellableFeatures.filter((feature) => plan?.features.includes(feature));
-  const missingFeatures = sellableFeatures.filter((feature) => !plan?.features.includes(feature));
 
-  // One row, drawn the same way in both groups. A function rather than two
-  // copies of the markup, so a change to a row cannot land in one list and
-  // miss the other.
+  // Where the points rows sit: directly under this benefit, on every plan.
+  //
+  // Anchored to a benefit rather than to a position, because a position moves
+  // the moment the label table is reordered — and pinning them to the end
+  // moved them whenever a plan included a different number of perks.
+  const POINTS_AFTER: Feature = "avatar_gallery";
+
+  // One row of the benefits list.
   const featureRow = (feature: Feature, included: boolean) => {
     const label = FEATURE_LABELS[feature];
     if (!label) return null;
@@ -239,6 +242,50 @@ export function ProPanel() {
         {row}
       </Tooltip>
     );
+  };
+
+  // The points, which are not features and deliberately not in the table
+  // above: `features` is the entitlement list — what the server decides an
+  // account may *do* — and points are not a permission, they are a payout.
+  // The numbers come from the API (see the plan route), so they cannot drift
+  // from what is actually credited.
+  const pointsRows = (entry: PremiumPlan) =>
+    [
+      entry.purchasePoints > 0 ? (
+        <li
+          key="purchase-points"
+          className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"
+        >
+          <MdCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-500" />
+          {/* The coin, in the same place the verified perk shows its badge —
+              between the tick and the words, so the tick stays the bullet
+              every row has. Same mark the profile page uses for a balance. */}
+          <BsCoin className="-mr-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          {entry.purchasePoints} pontos na hora, a cada pagamento
+        </li>
+      ) : null,
+      entry.dailyPoints > 0 ? (
+        <li
+          key="daily-points"
+          className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"
+        >
+          <MdCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-500" />
+          <BsCoin className="-mr-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          Mais {entry.dailyPoints} pontos por dia de assinatura
+        </li>
+      ) : null,
+    ].filter(Boolean);
+
+  /** The whole list, in order, with the points slotted in at their anchor. */
+  const featureRows = (entry: PremiumPlan) => {
+    const rows: ReactNode[] = [];
+    for (const feature of sellableFeatures) {
+      rows.push(featureRow(feature, entry.features.includes(feature)));
+      if (feature === POINTS_AFTER) rows.push(...pointsRows(entry));
+    }
+    // No plan sells the anchor benefit — the points still have to appear.
+    if (!sellableFeatures.includes(POINTS_AFTER)) rows.push(...pointsRows(entry));
+    return rows;
   };
   /** The money for the code on screen has landed and bought time. */
   const pixPaid = Boolean(pix) && active && (premium?.currentPeriodEnd ?? 0) > pixBaselineEnd;
@@ -374,7 +421,11 @@ export function ProPanel() {
     // usable again — the checkout can be abandoned, and the "assinar" they
     // press next must not find a disabled control.
     setBusy(false);
-  }, [email]);
+    // plan?.id and not just `email`: this callback carries which plan to buy,
+    // so a stale copy would open the checkout for whichever one was selected
+    // when it was last created — i.e. switching plans and pressing subscribe
+    // would charge for the previous one.
+  }, [email, plan?.id]);
 
   // A closed checkout window is the clearest "they are done with it" signal
   // available — either they paid or they gave up, and both mean this page
@@ -433,7 +484,8 @@ export function ProPanel() {
     setPixBaselineEnd(premium?.currentPeriodEnd ?? 0);
     setPix(result.charge);
     setBusy(false);
-  }, [email, premium?.currentPeriodEnd]);
+    // See handleSubscribe: plan?.id is what this buys.
+  }, [email, plan?.id, premium?.currentPeriodEnd]);
 
   // Pix is paid in a banking app, which tells this page nothing. Polling is
   // the only way it learns — the focus listener above does not fire, because
@@ -525,28 +577,7 @@ export function ProPanel() {
             </div>
 
             <ul className="mt-4 flex flex-col gap-2">
-              {includedFeatures.map((feature) => featureRow(feature, true))}
-              {/* Listed here rather than through `features` because that list
-                  is the entitlement table — things the server decides an
-                  account may *do* — and points are not a permission, they are
-                  a payout. The numbers still come from the API (see the plan
-                  route) so they cannot drift from what is actually credited. */}
-              {plan.purchasePoints > 0 && (
-                <li className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                  <MdCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-500" />
-                  {plan.purchasePoints} pontos na hora, a cada pagamento
-                </li>
-              )}
-              {plan.dailyPoints > 0 && (
-                <li className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                  <MdCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-500" />
-                  Mais {plan.dailyPoints} pontos por dia de assinatura
-                </li>
-              )}
-              {/* Last, always. What a plan does not include is worth showing —
-                  it is the answer to "why would I pay more" — but it is not
-                  what somebody reading their own plan's card came for. */}
-              {missingFeatures.map((feature) => featureRow(feature, false))}
+              {featureRows(plan)}
             </ul>
 
             <div className="mt-6">
