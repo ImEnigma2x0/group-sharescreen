@@ -410,17 +410,6 @@ function ProfileContent({
             </span>
           )}
 
-          {isEditing && (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Trocar foto de perfil"
-              className="absolute inset-0 flex flex-col items-center justify-center bg-black/55 text-white opacity-90 transition-opacity hover:opacity-100"
-            >
-              <MdPhotoCamera className="h-6 w-6" />
-              <span className="mt-1 text-[10px] font-bold uppercase tracking-wider">Alterar</span>
-            </button>
-          )}
         </div>
 
         <input
