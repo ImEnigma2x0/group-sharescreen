@@ -1150,7 +1150,7 @@ function ProfileContent({
                   >
                     @{account.username}
                   </p>
-                  <UserBadges account={account} isOwner={isOwner} />
+                  <UserBadges account={account} isOwner={isOwner} theme={theme ?? undefined} />
                 </div>
               </div>
               <span
