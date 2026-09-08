@@ -36,7 +36,7 @@ export type Account = {
    */
   profileTheme?: { from: string; to: string; angle: number } | null;
   /** The YouTube song on this profile, stored as its id. Same gate. */
-  profileSong?: { videoId: string; title: string } | null;
+  profileSong?: { videoId: string; title: string; volume?: number } | null;
   // Cumulative seconds, tracked automatically by the signaling server —
   // never hand-edited. Absent on an older API response, same "reads as 0"
   // fallback as points.
@@ -347,6 +347,8 @@ export type UpdateProfileInput = {
   profileTheme?: { from: string; to: string; angle: number } | null;
   /** A YouTube link. Null or "" clears it; absent leaves it alone. */
   song?: string | null;
+  /** 0-100. Travels beside the link so it can be changed on its own. */
+  songVolume?: number;
   equippedProfileColor?: string | null;
 };
 

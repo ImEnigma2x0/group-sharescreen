@@ -1,3 +1,7 @@
+"use client";
+
+import { useSyncExternalStore } from "react";
+
 // Which video a YouTube link points at.
 //
 // A mirror of the API's server/profileSong.ts, and deliberately the same
@@ -53,4 +57,59 @@ export function parseYouTubeId(value: unknown): string | null {
     return VIDEO_ID_RE.test(parts[1]) ? parts[1] : null;
   }
   return null;
+}
+
+// --- listener preference ---------------------------------------------------
+
+const AUTOPLAY_KEY = "sharescreen:profileSongAutoplay";
+
+/**
+ * Whether a profile's song may start on its own when its page is opened.
+ *
+ * A setting about this browser, not about any account: it answers "do I want
+ * other people's pages making noise at me", which is the listener's question
+ * and nobody else's. On by default, because a song that never plays is a
+ * feature that appears broken to the person who paid for it.
+ */
+export function getProfileSongAutoplay(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const raw = window.localStorage.getItem(AUTOPLAY_KEY);
+    return raw === null ? true : raw === "true";
+  } catch {
+    return true;
+  }
+}
+
+export function setProfileSongAutoplay(value: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(AUTOPLAY_KEY, String(value));
+  } catch {
+    // Private mode, or storage turned off. The setting simply does not stick.
+  }
+}
+
+/**
+ * The setting, as a hook that is safe to read during render.
+ *
+ * useSyncExternalStore rather than "false, then correct it in an effect":
+ * localStorage does not exist on the server, and the effect version renders
+ * once with the wrong answer and then sets state — which React 19 flags, and
+ * which for this setting means a song can start before the answer is known.
+ * The server snapshot is `false`, so the quiet answer is the one that
+ * survives a mismatch.
+ *
+ * The subscription is to `storage`, so turning the setting off in the room
+ * reaches a profile page already open in another tab.
+ */
+export function useProfileSongAutoplay(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      window.addEventListener("storage", onChange);
+      return () => window.removeEventListener("storage", onChange);
+    },
+    () => getProfileSongAutoplay(),
+    () => false
+  );
 }

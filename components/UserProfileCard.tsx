@@ -13,7 +13,7 @@ import { signalingClient } from "@/lib/signalingClient";
 import { getAccountToken, fetchAvatarOptions, type AvatarOptions } from "@/lib/accountApi";
 import { hasFeature } from "@/lib/entitlements";
 import { planIcon } from "@/components/planIcons";
-import { ProfileSongPlayer } from "@/components/ProfileSongPlayer";
+import { DEFAULT_SONG_VOLUME, ProfileSongPlayer } from "@/components/ProfileSongPlayer";
 import { parseYouTubeId } from "@/lib/profileSong";
 import {
   profileThemeStyle,
@@ -500,6 +500,9 @@ function ProfileContent({
   const [editTheme, setEditTheme] = useState<ProfileTheme | null>(account.profileTheme ?? null);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [editSong, setEditSong] = useState("");
+  const [editSongVolume, setEditSongVolume] = useState(
+    account.profileSong?.volume ?? DEFAULT_SONG_VOLUME
+  );
   // Which field is open for editing, or none. One at a time: two inputs open
   // at once is a form again, which is the thing this replaced.
   const [openField, setOpenField] = useState<"name" | "bio" | "song" | null>(null);
@@ -524,6 +527,7 @@ function ProfileContent({
     setBannerDataUrl(undefined);
     setEditTheme(account.profileTheme ?? null);
     setEditSong(songLinkOf(account.profileSong));
+    setEditSongVolume(account.profileSong?.volume ?? DEFAULT_SONG_VOLUME);
   }, [account]);
 
   // Load cosmetics when entering edit mode or when owned items change
@@ -670,6 +674,7 @@ function ProfileContent({
     setBannerDataUrl(undefined);
     setEditTheme(account.profileTheme ?? null);
     setEditSong(songLinkOf(account.profileSong));
+    setEditSongVolume(account.profileSong?.volume ?? DEFAULT_SONG_VOLUME);
     setAvatarPickerOpen(false);
     setBannerPickerOpen(false);
     setOpenField(null);
@@ -699,6 +704,11 @@ function ProfileContent({
         // profile. Unchanged means undefined, which the API reads as "leave
         // it alone"; "" is how it is told to clear one.
         ...(songChanged ? { song: editSong.trim() } : {}),
+        // Sent whenever it moved, with or without a new link — the API keeps
+        // the song and just moves the number.
+        ...(editSongVolume !== (account.profileSong?.volume ?? DEFAULT_SONG_VOLUME)
+          ? { songVolume: editSongVolume }
+          : {}),
         equippedProfileColor: editBgColor,
       });
 
@@ -1228,6 +1238,28 @@ function ProfileContent({
                         style={themedField}
                       />
                       {songError && <p className="text-xs text-red-500">{songError}</p>}
+                      {/* The volume visitors hear, not a control for whoever
+                          is listening: it is part of the choice, and the
+                          person who picked the song is the one who knows how
+                          loud it should sit under a page. */}
+                      <label
+                        className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400"
+                        style={themedHint}
+                      >
+                        Volume
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={editSongVolume}
+                          onChange={(e) => setEditSongVolume(Number(e.target.value))}
+                          className="h-1 flex-1 cursor-pointer accent-emerald-600"
+                        />
+                        <span className="w-9 shrink-0 tabular-nums text-right">
+                          {editSongVolume}%
+                        </span>
+                      </label>
                     </div>
                   }
                 >
@@ -1244,6 +1276,7 @@ function ProfileContent({
                           account.profileSong?.videoId === pendingSongId
                             ? account.profileSong.title
                             : "",
+                        volume: isEditing ? editSongVolume : account.profileSong?.volume,
                       }}
                       // Never while editing: the card is being worked on, and
                       // music starting under that is not a preview anybody

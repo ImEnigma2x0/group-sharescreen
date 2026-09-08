@@ -32,7 +32,12 @@ import type { ProfileThemeStyle } from "@/lib/profileTheme";
 export interface ProfileSong {
   videoId: string;
   title: string;
+  /** 0-100, set by the profile's owner. Absent on an older API. */
+  volume?: number;
 }
+
+/** Matches the API's DEFAULT_SONG_VOLUME. */
+export const DEFAULT_SONG_VOLUME = 20;
 
 export function ProfileSongPlayer({
   song,
@@ -59,6 +64,25 @@ export function ProfileSongPlayer({
   const title = song.title || "Música do perfil";
   const Icon = playing ? MdPause : MdPlayArrow;
 
+  /**
+   * The owner's volume, sent to the player.
+   *
+   * Has to be a command: the embed takes no volume in its URL, and it starts
+   * at full. Sent on load and again with every play, because the player
+   * ignores commands until its own API is ready and "ready" is not something
+   * the iframe's load event actually tells us.
+   */
+  function applyVolume() {
+    frameRef.current?.contentWindow?.postMessage(
+      JSON.stringify({
+        event: "command",
+        func: "setVolume",
+        args: [song.volume ?? DEFAULT_SONG_VOLUME],
+      }),
+      "https://www.youtube-nocookie.com"
+    );
+  }
+
   function toggle() {
     if (!started) {
       setStarted(true);
@@ -73,6 +97,7 @@ export function ProfileSongPlayer({
       JSON.stringify({ event: "command", func: playing ? "pauseVideo" : "playVideo", args: [] }),
       "https://www.youtube-nocookie.com"
     );
+    if (!playing) applyVolume();
     setPlaying((current) => !current);
   }
 
@@ -101,7 +126,21 @@ export function ProfileSongPlayer({
         <Icon
           className={`h-5 w-5 shrink-0 ${theme ? "" : "text-emerald-600 dark:text-emerald-500"}`}
         />
-        <span className="min-w-0 truncate">{title}</span>
+        <span className="min-w-0 flex-1 truncate">{title}</span>
+        {/* Far right, and only while running: the row already says what the
+            song is, and this says that it is playing right now — which the
+            pause icon on the left implies but does not show. */}
+        {playing && (
+          <span aria-hidden className="flex h-4 shrink-0 items-end gap-0.5">
+            {[0, 0.15, 0.3].map((delay) => (
+              <span
+                key={delay}
+                className="golive-eq-bar w-0.5 rounded-full bg-current"
+                style={{ height: "100%", animationDelay: `${delay}s` }}
+              />
+            ))}
+          </span>
+        )}
       </button>
 
       {started && (
@@ -115,6 +154,12 @@ export function ProfileSongPlayer({
           referrerPolicy="strict-origin-when-cross-origin"
           aria-hidden
           tabIndex={-1}
+          // Twice, a moment apart: the frame's load event fires before the
+          // player's own API is listening, so the first one is often lost.
+          onLoad={() => {
+            applyVolume();
+            setTimeout(applyVolume, 700);
+          }}
           className="pointer-events-none absolute bottom-0 left-0 h-px w-px border-0 opacity-0"
         />
       )}

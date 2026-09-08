@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { UserProfileCard } from "@/components/UserProfileCard";
+import { useProfileSongAutoplay } from "@/lib/profileSong";
 import { AdsterraNative } from "@/components/AdsterraNative";
 
 // The standalone profile page. Everything that is actually *the profile* now
@@ -10,6 +11,11 @@ import { AdsterraNative } from "@/components/AdsterraNative";
 // back out. Before that split, opening a profile from a room meant a new tab
 // showing this page, and the two would have drifted the moment either changed.
 export function UserProfileClient({ id }: { id: string }) {
+  // The listener's own setting (see lib/profileSong). Read through a store
+  // rather than an effect so the first render already has the answer — a
+  // song must not start while the page is still deciding whether it may.
+  const autoplay = useProfileSongAutoplay();
+
   return (
     <div className="flex flex-1 justify-center bg-zinc-50 px-4 py-10 dark:bg-black sm:py-16">
       <main className="w-full max-w-2xl">
@@ -22,7 +28,7 @@ export function UserProfileClient({ id }: { id: string }) {
         <div className="mt-4">
           {/* Autoplay only here: this page is somebody opening a profile on
               purpose. The room's popup passes nothing and gets a play button. */}
-          <UserProfileCard id={id} autoPlaySong />
+          <UserProfileCard id={id} autoPlaySong={autoplay} />
         </div>
         <AdsterraNative className="mt-8" />
       </main>

@@ -150,6 +150,7 @@ import {
 } from "@/components/icons";
 import { Tooltip, Popover } from "@/components/Tooltip";
 import { ThemeSegmented } from "@/components/ThemeToggle";
+import { getProfileSongAutoplay, setProfileSongAutoplay } from "@/lib/profileSong";
 import { useMediaQuery, SM_BREAKPOINT_QUERY, LG_BREAKPOINT_QUERY } from "@/lib/useMediaQuery";
 import {
   MdHome,
@@ -1125,6 +1126,9 @@ export function WatchRoom({ handle }: { handle: string }) {
     micBeforeDeafenRef.current = false;
   }, [micsMuted, isMicOn, setMicOn]);
   const [soundEffectsOn, setSoundEffectsOn] = useState(() => getSoundEffectsEnabled());
+  const [profileSongAutoplay, setProfileSongAutoplayState] = useState(() =>
+    getProfileSongAutoplay()
+  );
   const [doubleClickFocus, setDoubleClickFocus] = useState(() => getStoredDoubleClickFocus());
   const [mutedPeerIds, setMutedPeerIds] = useState<Set<string>>(new Set());
   const [peerVolumes, setPeerVolumes] = useState<Record<string, number>>(() => getStoredPeerVolumes());
@@ -1716,6 +1720,12 @@ export function WatchRoom({ handle }: { handle: string }) {
     const next = !doubleClickFocus;
     setDoubleClickFocus(next);
     setStoredDoubleClickFocus(next);
+  }
+
+  function toggleProfileSongAutoplay() {
+    const next = !profileSongAutoplay;
+    setProfileSongAutoplayState(next);
+    setProfileSongAutoplay(next);
   }
 
   function toggleSoundEffects() {
@@ -3793,6 +3803,14 @@ export function WatchRoom({ handle }: { handle: string }) {
         hint="Quando desligado, focar em um vídeo é apenas pelo botão"
         activeIcon={<FocusIcon className="h-4 w-4" />}
         inactiveIcon={<EyeOffIcon className="h-4 w-4" />}
+      />
+      <MenuToggleRow
+        label="Música nos perfis"
+        active={profileSongAutoplay}
+        onToggle={toggleProfileSongAutoplay}
+        hint="Quando desligado, a música de um perfil só toca se você apertar o play"
+        activeIcon={<SpeakerIcon className="h-4 w-4" />}
+        inactiveIcon={<SpeakerMuteIcon className="h-4 w-4" />}
       />
       <MenuToggleRow
         label="Efeitos sonoros do site"

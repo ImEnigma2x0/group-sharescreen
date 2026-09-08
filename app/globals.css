@@ -519,3 +519,38 @@ html .ntpopups-main {
   color: currentColor;
   opacity: 0.55;
 }
+
+/*
+ * The bars of the "playing" indicator on a profile song.
+ *
+ * Three bars on the same animation at different delays, which is enough to
+ * read as sound without being a meter — it is not measuring anything, it is
+ * saying "this is running". Height rather than opacity so it still reads at a
+ * glance on a busy gradient.
+ */
+@keyframes golive-eq {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.golive-eq-bar {
+  transform-origin: bottom;
+  animation: golive-eq 0.9s ease-in-out infinite;
+}
+
+/*
+ * Stillness for anyone who asked the system for it. A looping animation is
+ * exactly what this setting exists to stop, and the icon still says "playing"
+ * by being there.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .golive-eq-bar {
+    animation: none;
+    transform: scaleY(0.7);
+  }
+}
