@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "254262038592",
+    "project_id": "golive-a4746",
+    "storage_bucket": "golive-a4746.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:254262038592:android:0a9c4fba7946acdcd90fa5",
+        "android_client_info": {
+          "package_name": "me.nemtudo.golive"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBsqHwP4I0Xb8w47H_mciMFoU4S11WQabI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
