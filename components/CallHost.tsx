@@ -72,18 +72,36 @@ export function CallHost() {
     endedSeq: number;
     acceptedSeq: number;
     text: string | null;
-  }>({ endedSeq: 0, acceptedSeq: 0, text: null });
+    /**
+     * The call this device hung up on itself, either end of it.
+     *
+     * Carried in the same state as the sentence it suppresses rather than in a
+     * ref, because it is read while deciding what to render — which is exactly
+     * what a ref must not be used for. Only the last one is kept: you can only
+     * hang up on one call at a time, and the notice is always about the most
+     * recent thing that happened.
+     */
+    selfEnded: string | null;
+  }>({ endedSeq: 0, acceptedSeq: 0, text: null, selfEnded: null });
 
   if (notice.endedSeq !== callEndedSeq || notice.acceptedSeq !== callAcceptedSeq) {
     setNotice({
       endedSeq: callEndedSeq,
       acceptedSeq: callAcceptedSeq,
+      // "call-ended" goes to both people, so the one who pressed "recusar"
+      // was being told "Chamada recusada." about their own press. Suppressed
+      // by remembering what this device ended itself — the sentence exists
+      // for the *other* end, which has no idea why the ringing stopped.
       // A call that was *answered* leaves nothing to say — both people are on
       // their way into the room — and it must also clear whatever the
       // previous call left behind, or "chamada recusada" follows somebody
       // into a call that is starting perfectly well.
       text:
-        notice.acceptedSeq !== callAcceptedSeq ? null : noticeFor(callEnded?.reason ?? null),
+        notice.acceptedSeq !== callAcceptedSeq ||
+        (callEnded && callEnded.callId === notice.selfEnded)
+          ? null
+          : noticeFor(callEnded?.reason ?? null),
+      selfEnded: notice.selfEnded,
     });
   }
   const noticeText = notice.text;
@@ -218,6 +236,7 @@ export function CallHost() {
   const onDecline = useCallback(() => {
     if (!incomingCall) return;
     stopRingtone();
+    setNotice((current) => ({ ...current, selfEnded: incomingCall.id }));
     signalingClient.clearCall(incomingCall.id);
     endCall(incomingCall.id, "decline");
   }, [incomingCall]);
@@ -225,6 +244,7 @@ export function CallHost() {
   const onCancel = useCallback(() => {
     if (!outgoingCall) return;
     stopRingtone();
+    setNotice((current) => ({ ...current, selfEnded: outgoingCall.id }));
     signalingClient.clearCall(outgoingCall.id);
     endCall(outgoingCall.id, "cancel");
   }, [outgoingCall]);
@@ -236,8 +256,12 @@ export function CallHost() {
   const call = incomingCall ?? outgoingCall;
   if (!call && !noticeText) return null;
 
-  const isIncoming = Boolean(incomingCall);
-  const other = isIncoming ? call!.from : call!.to;
+  const isIncoming = incomingCall !== null;
+  // Narrowed rather than asserted. The guard above lets `call` through as null
+  // whenever there is a notice to show — which is every decline, every
+  // "ninguém atendeu", every refusal — and the non-null assertion that used to
+  // stand here turned exactly those moments into a crash.
+  const other = call ? (isIncoming ? call.from : call.to) : null;
 
   return (
     <div
@@ -247,7 +271,7 @@ export function CallHost() {
       role="alert"
       aria-live="assertive"
     >
-      {call ? (
+      {call && other ? (
         <div className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
           <div className="flex items-center gap-3 p-4">
             <UserAvatar
