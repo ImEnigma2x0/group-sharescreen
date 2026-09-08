@@ -54,6 +54,31 @@ jobs:
           node-version: 22
           cache: npm
 
+      # setup-node's npm cache archives the whole of `_cacache` — including
+      # `tmp/`, which is scratch space npm was never meant to get back. The
+      # names in there are generated per write and are not unique across runs,
+      # so a restored one eventually collides with a fresh one and the install
+      # dies at:
+      #
+      #   npm error EEXIST: file already exists, open '<cache>/_cacache/tmp/...'
+      #
+      # It only bites when packages are actually downloaded, which is why it
+      # stayed hidden until a release changed package-lock.json. Deleting the
+      # directory keeps every other benefit of the cache: `tmp` holds nothing
+      # worth restoring by definition.
+      #
+      # `|| true` because a runner whose cache was never restored has no such
+      # directory, and that is not a failed release.
+      - name: Drop the restored npm scratch directory
+        shell: bash
+        run: |
+          # Backslashes to forward slashes: on Windows this answers a path
+          # written with backslashes, which Git Bash's rm does not read as one.
+          # Bash's own substitution rather than `tr`, whose argument would then
+          # have to survive being escaped through YAML as well as the shell.
+          cache="$(npm config get cache)"
+          rm -rf "${cache//\\//}/_cacache/tmp" || true
+
       # The full install, Electron binary included — unlike the Dockerfile,
       # this is the one place that genuinely needs it.
       - run: npm ci
