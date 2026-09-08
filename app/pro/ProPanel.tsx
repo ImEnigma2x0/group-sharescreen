@@ -579,7 +579,7 @@ export function ProPanel({
           <BsStars className="relative mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
           <p className="relative text-sm leading-relaxed text-emerald-900 dark:text-emerald-200">
             <span className="font-semibold">Apoiador Inicial:</span> quem assinar qualquer plano
-            até <span className="font-semibold">18 de setembro</span> ganha a badge de apoiador
+            até <span className="font-semibold">18 de outubro</span> ganha a badge de apoiador
             inicial no perfil, para sempre.{" "}
             <Link href="/badges" target="_blank" className="underline underline-offset-2">
               Ver as badges
@@ -640,6 +640,23 @@ export function ProPanel({
             </ul>
 
             <div className="mt-6">
+              {/* A refusal, said plainly and with a way forward. Mercado
+                  Pago's reason codes are for us, not for the buyer — the one
+                  distinction worth passing on is "your card was declined" vs
+                  "something went wrong", and in either case Pix is the answer
+                  that works right now. */}
+              {premium?.lastRefusal && !active && (
+                <div className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
+                  <p className="font-medium">
+                    {premium.lastRefusal.reason.startsWith("cc_rejected")
+                      ? "O pagamento no cartão foi recusado."
+                      : "O último pagamento não foi concluído."}
+                  </p>
+                  <p className="mt-1 text-red-700 dark:text-red-300/90">
+                    Nada foi cobrado. Você pode tentar outro cartão ou pagar por Pix aqui mesmo.
+                  </p>
+                </div>
+              )}
               {resolvingAccount ? (
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">Carregando…</p>
               ) : !account ? (

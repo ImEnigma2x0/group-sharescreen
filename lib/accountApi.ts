@@ -83,6 +83,14 @@ export type PremiumState = {
   providerRef: string;
   lastPaymentId: string | null;
   cancelledAt: number | null;
+  /**
+   * The last charge Mercado Pago refused, with their own reason code.
+   *
+   * Present so the page can say it. A declined card moves no money and
+   * changes nothing, so without this the person comes back to a page that
+   * still says "assine" and reads it as the site being broken.
+   */
+  lastRefusal?: { reason: string; at: number } | null;
   updatedAt: number;
 };
 

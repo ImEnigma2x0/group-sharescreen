@@ -41,7 +41,7 @@ export const BETA_TESTER_CUTOFF_MS = new Date("2026-09-08T00:00:00-03:00").getTi
  * Lives here so the deadline is one value: the Pro page and the modal both
  * announce it, and the day it passes they stop announcing it together.
  */
-export const EARLY_SUPPORTER_CUTOFF_MS = new Date("2026-09-19T00:00:00-03:00").getTime();
+export const EARLY_SUPPORTER_CUTOFF_MS = new Date("2026-10-19T00:00:00-03:00").getTime();
 
 export const DEFAULT_BADGES: BadgeDefinition[] = [
   {
