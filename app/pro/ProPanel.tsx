@@ -61,6 +61,8 @@ const FEATURE_LABELS: Partial<Record<Feature, string>> = {
   avatar_gallery: "Avatares exclusivos para a sua foto de perfil",
   avatar_upload: "Use qualquer imagem sua como foto de perfil",
   banner_upload: "Envie o seu próprio banner de perfil",
+  profile_gradient: "Escolha as cores de fundo do seu perfil",
+  profile_song: "Coloque uma música no seu perfil",
 };
 
 function periodEndLabel(timestamp: number): string {
