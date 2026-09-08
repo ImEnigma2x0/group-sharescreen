@@ -133,7 +133,7 @@ export function RoomAccountCard({
         ) : account ? (
           <Tooltip content="Ver seu perfil" placement="top">
             <Link
-              href={`/user/${account.id}`}
+              href={`/user/${account.username}`}
               target="_blank"
               className="flex min-w-0 flex-1 items-center gap-3 rounded-lg transition hover:opacity-80 [@media(max-height:52rem)]:gap-2"
             >

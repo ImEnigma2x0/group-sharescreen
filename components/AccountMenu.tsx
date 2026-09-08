@@ -180,7 +180,7 @@ export function AccountMenu() {
                     pages live, and a friends list is only ever about the
                     person already signed in. */}
                 {authAccount?.id && (
-                  <Link href={`/user/${authAccount.id}`} onClick={close} className={itemClass}>
+                  <Link href={`/user/${authAccount.username}`} onClick={close} className={itemClass}>
                     Meu perfil
                   </Link>
                 )}
