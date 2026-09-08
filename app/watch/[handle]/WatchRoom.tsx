@@ -1909,7 +1909,7 @@ export function WatchRoom({ handle }: { handle: string }) {
   // state nobody can see.
   const privateRoomCannotBeMapped = isPrivateRoomHandle(handle);
   const roomLocationTooltip = privateRoomCannotBeMapped
-    ? "Apenas salas públicas podem definir uma localização"
+    ? "Apenas salas públicas podem definir uma localização no Mapa Mundi"
     : isRoomManager
       ? "Escolha onde esta sala fica no mapa do mundo"
       : "Veja onde esta sala fica no mapa do mundo";
@@ -4437,7 +4437,7 @@ export function WatchRoom({ handle }: { handle: string }) {
                 }`}
             >
               <MdOutlineMap className="h-4 w-4 shrink-0" />
-              {state.roomLocation || !isRoomManager ? "Local no mapa" : "Definir local no mapa"}
+              {state.roomLocation || !isRoomManager ? "Local no mapa" : "Definir no mapa"}
             </button>
           </Tooltip>
           {isRoomManager && (
