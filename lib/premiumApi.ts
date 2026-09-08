@@ -11,6 +11,26 @@ import { getSignalingHttpBase } from "./roomsApi";
 // values around and nothing more — which is the property that makes the
 // paywall worth having.
 
+export type BillingCycle = "monthly" | "yearly";
+
+/** One billing cycle of a plan, priced. */
+export type PlanCycle = {
+  cycle: BillingCycle;
+  priceCents: number;
+  priceLabel: string;
+  pixPriceCents: number;
+  pixPriceLabel: string;
+  /** The struck-through price, or null when the plan is not on offer. */
+  fullPriceCents: number | null;
+  fullPriceLabel: string | null;
+  /** Whole percent off, or 0 when there is no offer. */
+  discountPercent: number;
+  /** A year's price divided by twelve — the only fair way to compare cycles. */
+  monthlyEquivalentLabel: string;
+  /** What a single Pix charge buys, in days. */
+  periodDays: number;
+};
+
 export type PremiumPlan = {
   id: string;
   title: string;
@@ -36,6 +56,17 @@ export type PremiumPlan = {
   frequency: number;
   frequencyType: string;
   features: string[];
+  /**
+   * What each billing cycle costs, worked out by the API.
+   *
+   * Not derived here on purpose: the page shows a struck-through price and a
+   * percentage, and those have to be the same numbers the checkout will
+   * charge. Computing them twice is how a page ends up advertising a discount
+   * the till does not give.
+   *
+   * Absent from an older API, which the page reads as "monthly only".
+   */
+  cycles?: PlanCycle[];
   /** Points credited the moment a charge is approved — every charge. */
   purchasePoints: number;
   /** Points credited per whole day the subscription stays active. */
@@ -116,13 +147,18 @@ export type StartCheckoutResult =
  */
 export async function startPremiumCheckout(
   email?: string,
-  planId?: string
+  planId?: string,
+  cycle?: BillingCycle
 ): Promise<StartCheckoutResult> {
   try {
     const res = await fetch(`${getSignalingHttpBase()}/premium/subscribe`, {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ ...(email ? { email } : {}), ...(planId ? { planId } : {}) }),
+      body: JSON.stringify({
+        ...(email ? { email } : {}),
+        ...(planId ? { planId } : {}),
+        ...(cycle ? { cycle } : {}),
+      }),
     });
     const data = (await res.json().catch(() => ({}))) as {
       checkoutUrl?: string;
@@ -174,13 +210,18 @@ export type StartPixResult =
  */
 export async function startPixPayment(
   email?: string,
-  planId?: string
+  planId?: string,
+  cycle?: BillingCycle
 ): Promise<StartPixResult> {
   try {
     const res = await fetch(`${getSignalingHttpBase()}/premium/pix`, {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ ...(email ? { email } : {}), ...(planId ? { planId } : {}) }),
+      body: JSON.stringify({
+        ...(email ? { email } : {}),
+        ...(planId ? { planId } : {}),
+        ...(cycle ? { cycle } : {}),
+      }),
     });
     const data = (await res.json().catch(() => ({}))) as Partial<PixCharge> & {
       error?: string;

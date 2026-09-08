@@ -10,6 +10,7 @@ import { Tooltip } from "@/components/Tooltip";
 import { PixIcon } from "@/components/icons";
 import { planIcon } from "@/components/planIcons";
 import { EARLY_SUPPORTER_CUTOFF_MS } from "@/lib/badges";
+import type { BillingCycle } from "@/lib/premiumApi";
 import { useAuth } from "@/lib/AuthContext";
 import { AccountModal, type AccountModalMode } from "@/components/AccountModal";
 import { PixChargeModal } from "@/components/PixChargeModal";
@@ -136,6 +137,7 @@ export function ProPanel({
   // a page open across midnight on the 18th is not the case worth the extra
   // machinery.
   const [earlySupporterOpen] = useState(() => Date.now() < EARLY_SUPPORTER_CUTOFF_MS);
+  const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [plans, setPlans] = useState<PremiumPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   // Derived, not stored. Keeping a second copy of the chosen plan in state
@@ -143,6 +145,29 @@ export function ProPanel({
   // `plan` — one of the two would eventually be a render behind the other.
   const plan =
     plans.find((entry) => entry.id === selectedPlanId) ?? plans[0] ?? null;
+  /**
+   * The prices for the cycle on screen, from the API.
+   *
+   * Falls back to the plan's own monthly figures when the API predates
+   * cycles, so an older deployment renders exactly as it did before rather
+   * than showing nothing.
+   */
+  const pricing =
+    plan?.cycles?.find((entry) => entry.cycle === cycle) ??
+    (plan
+      ? {
+          cycle: "monthly" as BillingCycle,
+          priceCents: plan.priceCents,
+          priceLabel: plan.priceLabel,
+          pixPriceCents: plan.pixPriceCents,
+          pixPriceLabel: plan.pixPriceLabel,
+          fullPriceCents: null,
+          fullPriceLabel: null,
+          discountPercent: 0,
+          monthlyEquivalentLabel: plan.priceLabel,
+          periodDays: 30,
+        }
+      : null);
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -405,7 +430,7 @@ export function ProPanel({
     const replacePage = !bridge && checkoutMustReplacePage();
     const tab = bridge || replacePage ? null : window.open("", "_blank");
 
-    const result = await startPremiumCheckout(email.trim() || undefined, plan?.id);
+    const result = await startPremiumCheckout(email.trim() || undefined, plan?.id, cycle);
     if (!result.ok) {
       // The placeholder has no reason to exist any more, and leaving a blank
       // tab behind after a failure reads as a second thing having gone wrong.
@@ -445,7 +470,7 @@ export function ProPanel({
     // so a stale copy would open the checkout for whichever one was selected
     // when it was last created — i.e. switching plans and pressing subscribe
     // would charge for the previous one.
-  }, [email, plan?.id]);
+  }, [email, plan?.id, cycle]);
 
   // A closed checkout window is the clearest "they are done with it" signal
   // available — either they paid or they gave up, and both mean this page
@@ -492,7 +517,7 @@ export function ProPanel({
   const handlePix = useCallback(async () => {
     setBusy(true);
     setError(null);
-    const result = await startPixPayment(email.trim() || undefined, plan?.id);
+    const result = await startPixPayment(email.trim() || undefined, plan?.id, cycle);
     if (!result.ok) {
       setError(result.error);
       if (result.needsEmail) setNeedsEmail(true);
@@ -505,7 +530,7 @@ export function ProPanel({
     setPix(result.charge);
     setBusy(false);
     // See handleSubscribe: plan?.id is what this buys.
-  }, [email, plan?.id, premium?.currentPeriodEnd]);
+  }, [email, plan?.id, cycle, premium?.currentPeriodEnd]);
 
   // Pix is paid in a banking app, which tells this page nothing. Polling is
   // the only way it learns — the focus listener above does not fire, because
@@ -579,8 +604,8 @@ export function ProPanel({
           <BsStars className="relative mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
           <p className="relative text-sm leading-relaxed text-emerald-900 dark:text-emerald-200">
             <span className="font-semibold">Apoiador Inicial:</span> quem assinar qualquer plano
-            até <span className="font-semibold">18 de outubro</span> ganha a badge de apoiador
-            inicial no perfil, para sempre.{" "}
+            até <span className="font-semibold">18 de outubro</span> ganha a badge de Apoiador
+            Inicial no perfil, para sempre.{" "}
             <Link href="/badges" target="_blank" className="underline underline-offset-2">
               Ver as badges
             </Link>
@@ -611,7 +636,13 @@ export function ProPanel({
                 <entryMark.Icon className={`h-5 w-5 shrink-0 ${active ? "" : entryMark.className}`} />
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold">{entry.title}</span>
-                  <span className="block text-xs opacity-80">{entry.priceLabel} / mês</span>
+                  {/* The price for the cycle on screen, not always the
+                      monthly one: with "Anual" selected, a card still quoting
+                      a month would be comparing two different things. */}
+                  <span className="block text-xs opacity-80">
+                    {(entry.cycles?.find((c) => c.cycle === cycle)?.priceLabel ?? entry.priceLabel)}{" "}
+                    {cycle === "yearly" ? "/ ano" : "/ mês"}
+                  </span>
                 </span>
               </button>
             );
@@ -628,12 +659,72 @@ export function ProPanel({
           </p>
         ) : (
           <>
-            <div className="flex items-baseline gap-1.5">
+            {/* Monthly / yearly. Only when the API offers the choice — an
+                older one sends no cycles and the page stays as it was. */}
+            {plan.cycles && plan.cycles.length > 1 && (
+              <div className="mb-4 inline-flex rounded-xl border border-zinc-200 p-1 dark:border-zinc-800">
+                {plan.cycles.map((entry) => {
+                  const active = entry.cycle === cycle;
+                  return (
+                    <button
+                      key={entry.cycle}
+                      type="button"
+                      onClick={() => setCycle(entry.cycle)}
+                      aria-pressed={active}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                        active
+                          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                          : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      }`}
+                    >
+                      {entry.cycle === "yearly" ? "Anual" : "Mensal"}
+                      {/* The saving on the tab itself, so the reason to look
+                          at the yearly option is visible before opening it. */}
+                      {entry.cycle === "yearly" && entry.discountPercent > 0 && (
+                        <span
+                          className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
+                            active
+                              ? "bg-white/20 text-white dark:bg-zinc-900/15 dark:text-zinc-900"
+                              : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                          }`}
+                        >
+                          -{entry.discountPercent}%
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              {/* The old price first and struck through, then the real one:
+                  read left to right that is "was this, is now this", which is
+                  the order the sentence is spoken in. */}
+              {pricing?.fullPriceLabel && (
+                <span className="text-lg font-medium text-zinc-400 line-through dark:text-zinc-600">
+                  {pricing.fullPriceLabel}
+                </span>
+              )}
               <span className="text-3xl font-semibold text-zinc-950 dark:text-zinc-50">
-                {plan.priceLabel}
+                {pricing?.priceLabel ?? plan.priceLabel}
               </span>
-              <span className="text-sm text-zinc-500 dark:text-zinc-400">/ mês</span>
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                {cycle === "yearly" ? "/ ano" : "/ mês"}
+              </span>
+              {pricing && pricing.discountPercent > 0 && (
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  {pricing.discountPercent}% de desconto
+                </span>
+              )}
             </div>
+            {cycle === "yearly" && pricing && (
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                {/* The per-month figure, because a yearly total and a monthly
+                    one cannot be compared as they stand. */}
+                Equivale a {pricing.monthlyEquivalentLabel} por mês.
+              </p>
+            )}
 
             <ul className="mt-4 flex flex-col gap-2">
               {featureRows(plan)}
@@ -808,7 +899,9 @@ export function ProPanel({
                       >
                         {busy
                           ? "Abrindo o pagamento…"
-                          : `${activeHere ? "Renovar" : active ? "Trocar" : "Assinar"} por ${plan.priceLabel}/mês`}
+                          : `${activeHere ? "Renovar" : active ? "Trocar" : "Assinar"} por ${
+                              pricing?.priceLabel ?? plan.priceLabel
+                            }${cycle === "yearly" ? "/ano" : "/mês"}`}
                       </button>
                       {/* Pix's own teal rather than the page's neutral: it is
                           the colour people recognise the method by, and it is
@@ -823,7 +916,11 @@ export function ProPanel({
                         className="flex items-center gap-2 rounded-lg bg-[#32BCAD] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#2ba99b] disabled:opacity-60"
                       >
                         <PixIcon className="h-4 w-4 shrink-0" />
-                        {busy ? "Gerando…" : `${plan.pixPriceLabel} por 30 dias`}
+                        {busy
+                          ? "Gerando…"
+                          : `${pricing?.pixPriceLabel ?? plan.pixPriceLabel} por ${
+                              pricing?.periodDays ?? 30
+                            } dias`}
                       </button>
                     </div>
                   )}
