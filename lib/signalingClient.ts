@@ -488,6 +488,10 @@ export type SignalingState = {
     note?: string;
     /** Who refused or gave up. Absent for a call that simply rang out. */
     by?: CallUserWire;
+    /** Who placed the call, always — a missed call is named after them. */
+    caller?: CallUserWire;
+    /** Who was being rung. Compare against your own id to know which end you were. */
+    calleeId?: string;
   } | null;
   callEndedSeq: number;
   // "Apoiar projeto" hover list (see SupportersTooltip.tsx) — same
@@ -1725,6 +1729,8 @@ class SignalingClient {
             reason,
             ...(note ? { note } : {}),
             ...(msg.by ? { by: msg.by as CallUserWire } : {}),
+            ...(msg.caller ? { caller: msg.caller as CallUserWire } : {}),
+            ...(typeof msg.calleeId === "string" ? { calleeId: msg.calleeId } : {}),
           },
           callEndedSeq: this.state.callEndedSeq + 1,
         });

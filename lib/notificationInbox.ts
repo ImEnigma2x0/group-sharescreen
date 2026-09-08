@@ -21,7 +21,11 @@ const STORAGE_KEY = "sharescreen:notifications";
 /** Beyond this the oldest are dropped. A bell is not an archive. */
 const MAX_ITEMS = 50;
 
-export type NotificationKind = "friend-request" | "friend-accepted" | "dm";
+export type NotificationKind =
+  | "friend-request"
+  | "friend-accepted"
+  | "dm"
+  | "call-missed";
 
 export interface InboxNotification {
   /** Names the thing, not the moment — see the header on dedup. */

@@ -8,6 +8,7 @@ import { useSignaling } from "@/lib/useSignaling";
 import { signalingClient } from "@/lib/signalingClient";
 import { acceptCall, endCall, fetchPendingCalls } from "@/lib/callsApi";
 import { showNotification } from "@/lib/notifications";
+import { upsertNotification } from "@/lib/notificationInbox";
 import { getDesktopBridge } from "@/lib/desktop";
 import { startRingtone, stopRingtone } from "@/lib/soundEffects";
 import { DEFAULT_AVATAR_PATH, UserAvatar } from "@/components/UserAvatar";
@@ -330,6 +331,39 @@ export function CallHost() {
     signalingClient.clearCall(outgoingCall.id);
     void endCall(outgoingCall.id, "cancel");
   }, [outgoingCall]);
+
+  // ─── A call that rang out ───────────────────────────────────────────────
+  //
+  // The bell is for things that happened while you were not looking, and a
+  // call nobody answered is the clearest example there is: the ringing screen
+  // took itself down when it timed out, so without this the only trace of
+  // somebody trying to reach you would be a sound you may not have been near.
+  //
+  // Only the *callee*, and only on a timeout. "Recusada" and "cancelada" are
+  // things one of the two people did on purpose and already know about, and
+  // the caller learning nobody picked up is told so on screen at the time.
+  // Which end this client was is the one thing the message has to say, because
+  // by the time it lands the call it describes is already gone from state.
+  const lastMissedRef = useRef(0);
+  useEffect(() => {
+    if (callEndedSeq === lastMissedRef.current) return;
+    lastMissedRef.current = callEndedSeq;
+    if (!account || !callEnded || callEnded.reason !== "timeout") return;
+    if (callEnded.calleeId !== account.id) return;
+    const caller = callEnded.caller;
+    if (!caller) return;
+    // Keyed by the caller rather than by the call, and upserted: three missed
+    // calls from one person is one row carrying the newest of them, the same
+    // way a burst of messages is (see DmNotifier). No sound — the phone was
+    // already ringing, which was the announcement.
+    upsertNotification({
+      id: `call-missed:${caller.id}`,
+      kind: "call-missed",
+      title: "Chamada perdida",
+      body: `${caller.displayName} te ligou.`,
+      userId: caller.id,
+    });
+  }, [account, callEnded, callEndedSeq]);
 
   // ─── Answered from the shell's own window ───────────────────────────────
   //

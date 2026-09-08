@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { MdChatBubbleOutline, MdNotificationsNone, MdPersonAdd } from "react-icons/md";
+import {
+  MdCallMissed,
+  MdChatBubbleOutline,
+  MdNotificationsNone,
+  MdPersonAdd,
+} from "react-icons/md";
 import { useNotifications } from "@/lib/useNotifications";
 import { FriendRequestsModal } from "@/components/FriendRequestsModal";
 import { openDirectMessages } from "@/lib/dmWindow";
@@ -50,6 +55,10 @@ function Item({
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
         {notification.kind === "dm" ? (
           <MdChatBubbleOutline className="h-4 w-4" />
+        ) : notification.kind === "call-missed" ? (
+          // The one row here that is red. A missed call is the only thing in
+          // this list somebody was actively waiting on an answer to.
+          <MdCallMissed className="h-4 w-4 text-red-500" />
         ) : (
           <MdPersonAdd className="h-4 w-4" />
         )}
@@ -139,7 +148,15 @@ export function NotificationInboxBell({ className = "" }: { className?: string }
                   onOpen={(notification) => {
                     setOpen(false);
                     if (notification.kind === "friend-request") setRequestsOpen(true);
-                    else if (notification.kind === "dm") openDirectMessages(notification.userId);
+                    // A missed call opens the conversation rather than calling
+                    // back: the bell is read long after the fact, and a click
+                    // that starts ringing somebody's phone is not what
+                    // "ver o que perdi" should do. It is also where the push
+                    // notification for the same event lands (see the API's
+                    // pushCallEnded), so the two agree.
+                    else if (notification.kind === "dm" || notification.kind === "call-missed") {
+                      openDirectMessages(notification.userId);
+                    }
                   }}
                 />
               ))}
