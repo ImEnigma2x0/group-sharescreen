@@ -195,7 +195,8 @@ async function captchaFieldFor(
 export async function registerAccount(
   username: string,
   displayName: string,
-  password: string
+  password: string,
+  email: string
 ): Promise<{ token: string; account: Account }> {
   const res = await fetch(`${getSignalingHttpBase()}/auth/register`, {
     method: "POST",
@@ -204,6 +205,7 @@ export async function registerAccount(
       username,
       displayName,
       password,
+      email,
       ...(await captchaFieldFor("register_account")),
     }),
   });

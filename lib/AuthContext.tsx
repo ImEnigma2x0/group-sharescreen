@@ -44,7 +44,12 @@ type AuthContextValue = {
   // a challenge on its own when it wants one (see lib/turnstile.ts). What a
   // caller sees is a call that occasionally takes a few seconds longer.
   login: (username: string, password: string) => Promise<Account>;
-  register: (username: string, displayName: string, password: string) => Promise<Account>;
+  register: (
+    username: string,
+    displayName: string,
+    password: string,
+    email: string
+  ) => Promise<Account>;
   // Finishes a Discord/Google *signup* (see lib/oauthApi.ts): the ticket
   // stands in for the password here — the provider identity behind it was
   // already verified server-side — and the result is an ordinary account,
@@ -200,8 +205,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const register = useCallback(
-    async (username: string, displayName: string, password: string) => {
-      const { account: acc } = await registerAccount(username, displayName, password);
+    async (username: string, displayName: string, password: string, email: string) => {
+      const { account: acc } = await registerAccount(username, displayName, password, email);
       setAccount(acc);
       setResolvedToken(getAccountToken());
       return acc;

@@ -53,6 +53,7 @@ export function CreateAccountForm({
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // Set when a social login turned out to be a signup. While it's here this
@@ -119,7 +120,7 @@ export function CreateAccountForm({
     setSubmitting(true);
     setFormError(null);
     try {
-      await register(trimmedUser, trimmedDisplay, password);
+      await register(trimmedUser, trimmedDisplay, password, email.trim().toLowerCase());
       trackEvent("account_created");
       onSuccess?.();
     } catch (err) {
@@ -144,6 +145,13 @@ export function CreateAccountForm({
     }
     if (password.length < 6) {
       setFormError("Senha deve ter ao menos 6 caracteres.");
+      return;
+    }
+    // Shape only, matching the API's own check — nothing here can prove an
+    // address, and a stricter pattern would reject valid ones while letting a
+    // plausible typo through just the same.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setFormError("Informe um e-mail válido.");
       return;
     }
     void submitRegister();
@@ -223,6 +231,18 @@ export function CreateAccountForm({
         <p className="-mt-1 text-xs text-zinc-500 dark:text-zinc-400">
           É como seu nome aparece na sala. Pode ser igual ao de outra pessoa.
         </p>
+        <label htmlFor="create-email" className={labelClass}>
+          E-mail
+        </label>
+        <input
+          id="create-email"
+          type="email"
+          autoComplete="email"
+          inputMode="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className={inputClass}
+        />
         <label htmlFor="create-password" className={labelClass}>
           Senha
         </label>
