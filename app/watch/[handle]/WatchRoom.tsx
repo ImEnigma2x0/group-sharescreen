@@ -5249,7 +5249,12 @@ export function WatchRoom({ handle }: { handle: string }) {
                 hidden, so each turn is a fresh creative. */}
             {showAdsterra ? (
               adsterraFormat === "native" ? (
-                <AdsterraNative className="shrink-0" label={false} />
+                // Capped to roughly the fixed banner it alternates with: this
+                // column has a participants list above it and a fixed height,
+                // so an ad that decides its own size decides how much of the
+                // room is left — uncapped it stacked its cards 1200px tall and
+                // covered everything under it.
+                <AdsterraNative className="shrink-0" label={false} maxHeight={280} />
               ) : (
                 <AdsterraBanner slot="room" className="shrink-0" />
               )

@@ -41,16 +41,34 @@ const INITIAL_HEIGHT = 260;
  * A ceiling, because the height arrives from inside an ad. A creative that
  * reports 40000px — through a bug or otherwise — would otherwise be handed
  * the whole page.
+ *
+ * It is the default rather than the rule: 1200px is a sane cap for a slot
+ * that owns the width of a page, and a catastrophe for one in a 300px column,
+ * where the same cards stack vertically instead of sitting in a row. See the
+ * `maxHeight` prop, and the room's use of it.
  */
 const MAX_HEIGHT = 1200;
 
 export function AdsterraNative({
   className = "",
   label = true,
+  maxHeight = MAX_HEIGHT,
 }: {
   className?: string;
   /** Defaults on here: a native ad is *designed* to look like site content. */
   label?: boolean;
+  /**
+   * How tall this slot may get, whatever the ad says it needs.
+   *
+   * The height of a native unit is decided by its own contents, so the space
+   * it takes is the *page's* decision to make, not the creative's: dropped
+   * into the room's participant column it laid its cards out in a single
+   * 1200px stack and buried the column it was sitting in. Anything past this
+   * is clipped (the frame does not scroll), which for a stack of cards means
+   * showing the first ones — the right way to be wrong, since the alternative
+   * is an ad that eats the room.
+   */
+  maxHeight?: number;
 }) {
   const allowed = useAdsAllowed();
   // See AdsterraBanner: one refusal anywhere takes every slot down, because
@@ -82,16 +100,19 @@ export function AdsterraNative({
         else setEmpty(true);
         return;
       }
-      setHeight(Math.min(Math.round(message.height), MAX_HEIGHT));
+      setHeight(Math.min(Math.round(message.height), maxHeight));
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [rendering, markSettled]);
+  }, [rendering, markSettled, maxHeight]);
 
   if (!rendering || !NATIVE_BANNER) return null;
 
   // The ad's real height once it reports one, and the placeholder until then.
-  const boxHeight = height ?? INITIAL_HEIGHT;
+  // The cap applies to the placeholder too: a slot that opens at 260px and
+  // then shrinks to its limit is the same jump this transition exists to
+  // avoid, just in the other direction.
+  const boxHeight = Math.min(height ?? INITIAL_HEIGHT, maxHeight);
 
   return (
     <div className={`flex w-full flex-col gap-1 ${className}`}>
