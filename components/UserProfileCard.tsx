@@ -12,6 +12,14 @@ import { useSignaling } from "@/lib/useSignaling";
 import { signalingClient } from "@/lib/signalingClient";
 import { getAccountToken, fetchAvatarOptions, type AvatarOptions } from "@/lib/accountApi";
 import { hasFeature } from "@/lib/entitlements";
+import { planIcon } from "@/components/planIcons";
+import {
+  profileThemeStyle,
+  GRADIENT_DIRECTIONS,
+  isHexColor,
+  type ProfileTheme,
+  type ProfileThemeStyle,
+} from "@/lib/profileTheme";
 import { DEFAULT_AVATAR_PATH } from "@/components/UserAvatar";
 import { fetchCosmeticsCatalog, type CosmeticProduct } from "@/lib/cosmetics";
 import { prepareAvatarImage, AVATAR_IMAGE_ACCEPT, AVATAR_IMAGE_MAX_BYTES } from "@/lib/avatarImage";
@@ -31,6 +39,109 @@ import { UserBadges } from "@/components/UserBadges";
 const cardClass =
   "rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950";
 
+/**
+ * One customisation group in the edit form.
+ *
+ * The form was a flat column of headings and controls with nothing drawing
+ * them together, so it read as a pile rather than as sections. A border and
+ * consistent padding is the whole fix.
+ */
+const sectionClass =
+  "flex flex-col gap-3 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800";
+
+/**
+ * The same group, in its plan's colour: blue for Pro, gold for Pro Max.
+ *
+ * The border carries the same information the badge beside the heading does,
+ * which is the point — somebody scanning the form sees which controls belong
+ * to which plan without reading a word, and the two paid tiers stop looking
+ * like one undifferentiated "locked".
+ */
+/**
+ * The 1px gradient ring on its own, so a row inside a popover can wear it
+ * without also taking PlanSection's heading and padding.
+ *
+ * Drawn only while the control is out of reach. The ring says "this belongs
+ * to a plan you do not have" — on a subscriber it would be decoration around
+ * something they can already use, and four decorated boxes is what the form
+ * looked like before. Nothing to show is the right answer once it is theirs.
+ */
+function PlanRing({ tier, locked }: { tier: "pro" | "proMax"; locked: boolean }) {
+  if (!locked) return null;
+  const ring =
+    tier === "proMax"
+      ? "linear-gradient(120deg, #f59e0b, #fde68a, #d97706)"
+      : "linear-gradient(120deg, #3b82f6, #93c5fd, #2563eb)";
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute inset-0 rounded-xl"
+      style={{
+        padding: 1,
+        background: ring,
+        WebkitMask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+        WebkitMaskComposite: "xor",
+        mask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+        maskComposite: "exclude",
+      }}
+    />
+  );
+}
+
+/** The wrapper classes for a row that only becomes a box while locked. */
+function planRowClass(locked: boolean, extra: string): string {
+  // Without the ring there is nothing for the padding to sit inside, and a
+  // padded row with no border reads as a stray indent.
+  return `${extra} ${locked ? "relative rounded-xl p-2.5" : ""}`;
+}
+
+function PlanSection({
+  tier,
+  title,
+  locked,
+  children,
+}: {
+  tier: "pro" | "proMax";
+  title: string;
+  /** Whether this account is missing the plan — decides the sales line. */
+  locked?: boolean;
+  children: React.ReactNode;
+}) {
+  // A 1px gradient ring, drawn by an overlay rather than by `border`.
+  //
+  // Two constraints ruled out the simpler ways. `border-image` takes a
+  // gradient but ignores border-radius, so the corners would go square; and
+  // the usual "wrapper with 1px padding over an opaque inner box" needs a
+  // solid fill in the middle, which would sit as a white rectangle on top of
+  // a subscriber's own profile gradient — this form has no background of its
+  // own and that gradient shows through it.
+  //
+  // So the ring is a masked child: the mask keeps the border area and cuts
+  // the middle out, leaving the interior genuinely transparent and the
+  // content untouched.
+  return (
+    // Locked: the plan's ring. Unlocked: the same neutral border every other
+    // section has, so the group still holds together without claiming a plan.
+    <div
+      className={`relative flex flex-col gap-3 rounded-xl p-3 ${
+        locked ? "" : "border border-zinc-200 dark:border-zinc-800"
+      }`}
+    >
+      <PlanRing tier={tier} locked={Boolean(locked)} />
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{title}</span>
+        {/* The sales line only for somebody who cannot use the section.
+            A subscriber already has it — telling them where to buy it is
+            noise in a form they are trying to fill in. */}
+        {locked && (
+          <PlanLink tier={tier} className="text-[11px] text-zinc-500 dark:text-zinc-400" />
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 // One of the three lifetime totals shown below the bio — same card shape for
 // call/mic/share time so the three read as one set, not three different
 // widgets that happen to sit next to each other.
@@ -38,18 +149,31 @@ function StatCard({
   icon,
   label,
   seconds,
+  theme,
 }: {
   icon: React.ReactNode;
   label: string;
   seconds: number;
+  theme?: ProfileThemeStyle | null;
 }) {
+  // Themed: a wash of the text colour rather than white/zinc, so these sit on
+  // the gradient instead of punching three opaque holes in it.
   return (
-    <div className={cardClass}>
-      <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+    <div
+      className={theme ? "rounded-xl border p-4" : cardClass}
+      style={theme ? { background: theme.surface, borderColor: theme.border } : undefined}
+    >
+      <div
+        className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400"
+        style={theme ? { color: theme.muted } : undefined}
+      >
         {icon}
         {label}
       </div>
-      <p className="mt-1.5 text-lg font-semibold tabular-nums text-zinc-950 dark:text-zinc-50">
+      <p
+        className="mt-1.5 text-lg font-semibold tabular-nums text-zinc-950 dark:text-zinc-50"
+        style={theme ? { color: theme.text } : undefined}
+      >
         {formatDuration(seconds)}
       </p>
     </div>
@@ -69,13 +193,33 @@ function StatCard({
  * The one place the "Pro Max" upsell is written, so both the avatar row and
  * the banner row say the same thing and lead to the same page.
  */
-function ProMaxLink() {
+function PlanLink({
+  tier,
+  label,
+  className = "",
+}: {
+  tier: "pro" | "proMax";
+  /** Overrides the default sentence, for a label that already names the plan. */
+  label?: string;
+  className?: string;
+}) {
+  // The plan's own mark beside the words, so "which plan is this" is answered
+  // by the same badge the subscriber wears — gold for Pro Max, blue for Pro
+  // (see components/planIcons). A sentence alone made every locked control
+  // look like it belonged to the same, unnamed tier.
+  const mark = planIcon(tier === "proMax" ? "gold_verified" : "blue_verified");
+  const Mark = mark.Icon;
   return (
     <Link
       href="/pro"
-      className="text-xs text-zinc-500 underline underline-offset-2 transition hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+      // A new tab, because this is read mid-edit: following it in place would
+      // throw away a half-written bio to go and read about a plan.
+      target="_blank"
+      rel="noopener"
+      className={`inline-flex items-center gap-1 underline underline-offset-2 transition hover:text-zinc-800 dark:hover:text-zinc-200 ${className}`}
     >
-      Exclusivo do Pro Max.
+      <Mark className={`h-3.5 w-3.5 shrink-0 ${mark.className}`} />
+      {label ?? `Disponível no ${tier === "proMax" ? "Pro Max" : "Pro"}.`}
     </Link>
   );
 }
@@ -88,6 +232,7 @@ function AvatarRow({
   onPick,
   locked = false,
   lockedHint,
+  lockedTier,
 }: {
   label: string;
   paths: string[];
@@ -95,12 +240,22 @@ function AvatarRow({
   onPick: (path: string) => void;
   locked?: boolean;
   lockedHint?: string;
+  lockedTier?: "pro" | "proMax";
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+      <span className="flex items-center gap-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
         {label}
-        {locked && lockedHint ? ` · ${lockedHint}` : ""}
+        {locked && lockedHint && (
+          <>
+            <span aria-hidden>·</span>
+            <PlanLink
+              tier={lockedTier ?? "pro"}
+              label={lockedHint}
+              className="text-[11px] text-zinc-500 dark:text-zinc-400"
+            />
+          </>
+        )}
       </span>
       <div className="flex flex-wrap gap-2">
         {paths.map((path) => (
@@ -249,13 +404,19 @@ function ProfileContent({
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null | undefined>(undefined);
   const [ownedBgColors, setOwnedBgColors] = useState<CosmeticProduct[]>([]);
   const [avatarOptions, setAvatarOptions] = useState<AvatarOptions | null>(null);
+  const [avatarOptionsError, setAvatarOptionsError] = useState<string | null>(null);
   const [previewBanner, setPreviewBanner] = useState<string | null>(account.bannerUrl ?? null);
+  const [editTheme, setEditTheme] = useState<ProfileTheme | null>(account.profileTheme ?? null);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [bannerPickerOpen, setBannerPickerOpen] = useState(false);
   const [bannerDataUrl, setBannerDataUrl] = useState<string | null | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const avatarPickerRef = useRef<HTMLDivElement>(null);
+  const bannerPickerRef = useRef<HTMLDivElement>(null);
 
   // Sync state if profile prop changes
   useEffect(() => {
@@ -266,6 +427,7 @@ function ProfileContent({
     setAvatarDataUrl(undefined);
     setPreviewBanner(account.bannerUrl ?? null);
     setBannerDataUrl(undefined);
+    setEditTheme(account.profileTheme ?? null);
   }, [account]);
 
   // Load cosmetics when entering edit mode or when owned items change
@@ -300,12 +462,48 @@ function ProfileContent({
         if (!cancelled) setAvatarOptions(options);
       })
       .catch(() => {
-        // The upload button and the current picture still work without it.
+        // Shown in the panel rather than swallowed: this list is the only
+        // content the pencil has, so losing it quietly looks like a dead
+        // button.
+        if (!cancelled) setAvatarOptionsError("Não foi possível carregar os avatares.");
       });
     return () => {
       cancelled = true;
     };
   }, [isEditing, isOwner]);
+
+  // Closing the picker: a click anywhere outside it, or Escape. Bound only
+  // while it is open, so a closed panel costs no listeners.
+  useEffect(() => {
+    if (!avatarPickerOpen && !bannerPickerOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target as Node | null;
+      if (!target) return;
+      // Each panel closes only on a click outside *itself*. The banner's
+      // trigger lives inside its own wrapper, so a click on it lands as
+      // "inside" and the button's toggle is left to do its job — treating it
+      // as outside would close and reopen in one gesture, which reads as the
+      // button doing nothing at all.
+      if (!avatarPickerRef.current?.contains(target)) {
+        const onAvatarPencil = (target as Element).closest?.(
+          '[aria-label="Alterar foto de perfil"]'
+        );
+        if (!onAvatarPencil) setAvatarPickerOpen(false);
+      }
+      if (!bannerPickerRef.current?.contains(target)) setBannerPickerOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setAvatarPickerOpen(false);
+      setBannerPickerOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [avatarPickerOpen, bannerPickerOpen]);
 
   /** A preset: stored as its own path, so no upload is involved. */
   function handlePickPreset(path: string) {
@@ -374,6 +572,9 @@ function ProfileContent({
     setAvatarDataUrl(undefined);
     setPreviewBanner(account.bannerUrl ?? null);
     setBannerDataUrl(undefined);
+    setEditTheme(account.profileTheme ?? null);
+    setAvatarPickerOpen(false);
+    setBannerPickerOpen(false);
     setError(null);
   }
 
@@ -393,6 +594,7 @@ function ProfileContent({
         bio: editBio.trim() ? editBio.trim() : null,
         avatar: avatarDataUrl,
         banner: bannerDataUrl,
+        profileTheme: editTheme,
         equippedProfileColor: editBgColor,
       });
 
@@ -428,12 +630,26 @@ function ProfileContent({
   const currentAvatar = (isEditing ? previewAvatar : account.avatarUrl) ?? DEFAULT_AVATAR_PATH;
   const currentBanner = isEditing ? previewBanner : account.bannerUrl;
   const canUploadBanner = hasFeature("banner_upload", authAccount?.features ?? []);
+  const canEditTheme = hasFeature("profile_gradient", authAccount?.features ?? []);
+  // While editing, the card *is* the preview — there is no second swatch to
+  // compare against, and a preview that is not the thing itself always
+  // disagrees with it somewhere.
+  const theme = profileThemeStyle(isEditing ? editTheme : account.profileTheme);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+    <div
+      className={`overflow-hidden rounded-2xl border transition-colors ${
+        theme ? "" : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+      }`}
+      // The gradient is the card, not a strip behind it: borders, panels and
+      // text all come from the same two colours (see lib/profileTheme), which
+      // is the difference between a themed profile and a background shoved
+      // under the old one.
+      style={theme ? { background: theme.background, borderColor: theme.border, color: theme.text } : undefined}
+    >
       {/* Banner image or background color purchased with points in cosmetics store */}
       <div
-        className="h-32 w-full transition-all duration-300 sm:h-44"
+        className="relative h-32 w-full transition-all duration-300 sm:h-44"
         style={
           currentBanner
             ? {
@@ -445,81 +661,60 @@ function ProfileContent({
             ? {
                 background: activeBgColor,
               }
-            : {
-                background: "linear-gradient(135deg, #18181b 0%, #10b981 140%)",
-              }
+            : theme
+              ? // Nothing of its own — the card's gradient shows through, so
+                // the top of the profile is one surface rather than two.
+                { background: "transparent" }
+              : {
+                  background: "linear-gradient(135deg, #18181b 0%, #10b981 140%)",
+                }
         }
-      />
+      >
+        {/* On the banner it changes, in the corner, rather than in a section
+            of the form below — the same move the avatar's pencil makes.
 
-      {/* Avatar overlapping banner and Edit Profile trigger */}
-      <div className="relative -mt-12 flex items-end justify-between px-5 sm:-mt-16 sm:px-6">
-        <div className="group relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border-4 border-white bg-zinc-100 shadow-md dark:border-zinc-950 dark:bg-zinc-900 sm:h-28 sm:w-28 flex items-center justify-center">
-          {/* No empty case left to handle: currentAvatar falls back to the
-              first default, so there is always a picture here. */}
-          <img
-            src={currentAvatar}
-            alt={account.displayName}
-            className="h-full w-full object-cover"
-          />
-
-        </div>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={AVATAR_IMAGE_ACCEPT}
-          className="hidden"
-          onChange={handleAvatarPicked}
-        />
-
-        <input
-          ref={bannerInputRef}
-          type="file"
-          accept={AVATAR_IMAGE_ACCEPT}
-          className="hidden"
-          onChange={handleBannerPicked}
-        />
-
-        {isOwner && !isEditing && (
-          <button
-            type="button"
-            onClick={() => setIsEditing(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
-            <MdEdit className="h-3.5 w-3.5 text-zinc-500" />
-            Editar perfil
-          </button>
-        )}
-      </div>
-
-      <div className="px-5 pb-5 sm:px-6 sm:pb-6">
-        {isEditing ? (
-          <form onSubmit={handleSave} className="mt-4 flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-zinc-200 pb-3 dark:border-zinc-800">
-              <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">
-                Editar informações de usuário
-              </h2>
-              {previewAvatar && (
+            It opens downward. Upward was the first instinct — keep the strip
+            being edited visible — but the panel is taller than the banner, so
+            it ran past the top of the card, which is overflow-hidden to round
+            its corners, and got sliced. Downward it opens into the card's own
+            body, which has all the room it needs. */}
+        {isEditing && (
+          <div className="absolute right-3 bottom-3" ref={bannerPickerRef}>
+            <button
+              type="button"
+              onClick={() => setBannerPickerOpen((open) => !open)}
+              aria-expanded={bannerPickerOpen}
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-black/50 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition-colors hover:bg-black/70"
+            >
+              <MdPhotoCamera className="h-3.5 w-3.5" />
+              Alterar banner
+            </button>
+            {bannerPickerOpen && (
+              <div
+                // Above the avatar row that overlaps this banner: that row
+                // comes later in the DOM and would otherwise paint over the
+                // panel opening under it.
+                className="absolute right-0 top-full z-40 mt-2 flex w-80 max-w-[calc(100vw-3rem)] flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-3 text-left shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+              >
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Alterar banner
+                </label>
                 <button
                   type="button"
-                  onClick={handleRemoveAvatar}
-                  className="flex items-center gap-1 text-xs font-medium text-red-600 transition hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                  onClick={() => openPopup("cosmetics_store", { data: {} })}
+                  className="flex items-center gap-1 text-xs font-medium text-emerald-600 transition hover:text-emerald-700 hover:underline dark:text-emerald-400 dark:hover:text-emerald-300"
                 >
-                  <MdDeleteOutline className="h-4 w-4" />
-                  Remover foto
+                  <BsShop className="h-3 w-3" />
+                  Loja de cosméticos
                 </button>
-              )}
-            </div>
-
-            {/* Banner. No catalogue to offer beside it — the whole feature is
-                bringing your own picture, so this is a button and a plan,
-                nothing more. Drawn for everybody rather than hidden from
-                non-subscribers, same reasoning as the locked avatar rows. */}
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Banner
-              </span>
-              <div className="flex flex-wrap items-center gap-2">
+              </div>
+              {/* The gold ring, same as every other Pro Max control. Only
+                  this row wears one: the store colours below are bought with
+                  points, not with a plan, so a plan's colour on them would be
+                  saying something untrue. */}
+              <div className={planRowClass(!canUploadBanner, "flex flex-wrap items-center gap-2")}>
+                <PlanRing tier="proMax" locked={!canUploadBanner} />
                 <button
                   type="button"
                   disabled={!canUploadBanner}
@@ -540,113 +735,8 @@ function ProfileContent({
                   </button>
                 )}
                 {!canUploadBanner && (
-                  <ProMaxLink />
+                  <PlanLink tier="proMax" className="text-xs text-zinc-500 dark:text-zinc-400" />
                 )}
-              </div>
-            </div>
-
-            {/* Avatar picker. Locked rows are drawn rather than hidden: a
-                perk nobody can see is a perk nobody buys, and the lock is
-                what says which plan carries it. Selecting one is still
-                refused by the API — this only decides what to offer. */}
-            {avatarOptions && (
-              <div className="flex flex-col gap-3">
-                <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  Foto de perfil
-                </span>
-
-                {/* currentAvatar, not previewAvatar: somebody who never chose
-                    is *wearing* the first default everywhere else in the app,
-                    so the picker has to show it as theirs. Marking nothing
-                    would invite them to "pick" the avatar they already have
-                    and then wonder why nothing changed.
-
-                    "Remover foto" above stays on previewAvatar on purpose —
-                    that one asks whether there is a stored picture to clear,
-                    which is a different question. */}
-                <AvatarRow
-                  label="Padrão"
-                  paths={avatarOptions.defaults}
-                  selected={currentAvatar}
-                  onPick={handlePickPreset}
-                />
-
-                {avatarOptions.gallery.length > 0 && (
-                  <AvatarRow
-                    label="Avatares Pro"
-                    paths={avatarOptions.gallery}
-                    selected={currentAvatar}
-                    onPick={handlePickPreset}
-                    locked={!avatarOptions.canUseGallery}
-                    lockedHint="Disponível no Pro"
-                  />
-                )}
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={!avatarOptions.canUpload}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                  >
-                    <MdPhotoCamera className="h-3.5 w-3.5" />
-                    Enviar minha imagem
-                  </button>
-                  {!avatarOptions.canUpload && (
-                      <ProMaxLink />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Display Name */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                <label htmlFor="edit-display-name">Nome de exibição</label>
-                <span className="text-zinc-400">{editDisplayName.length}/24</span>
-              </div>
-              <input
-                id="edit-display-name"
-                type="text"
-                maxLength={24}
-                value={editDisplayName}
-                onChange={(e) => setEditDisplayName(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-                required
-              />
-            </div>
-
-            {/* Bio */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                <label htmlFor="edit-bio">Descrição</label>
-                <span className="text-zinc-400">{editBio.length}/500</span>
-              </div>
-              <textarea
-                id="edit-bio"
-                rows={3}
-                maxLength={500}
-                value={editBio}
-                onChange={(e) => setEditBio(e.target.value)}
-                placeholder="Escreva algo sobre você..."
-                className="w-full resize-none rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-              />
-            </div>
-
-            {/* Background color from store */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  Cor do background
-                </label>
-                <button
-                  type="button"
-                  onClick={() => openPopup("cosmetics_store", { data: {} })}
-                  className="flex items-center gap-1 text-xs font-medium text-emerald-600 transition hover:text-emerald-700 hover:underline dark:text-emerald-400 dark:hover:text-emerald-300"
-                >
-                  <BsShop className="h-3 w-3" />
-                  Loja de cosméticos
-                </button>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -684,7 +774,7 @@ function ProfileContent({
 
               {ownedBgColors.length === 0 && (
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-xs text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/50 dark:text-zinc-400">
-                  <span>Você ainda não possui cores de background compradas na loja.</span>
+                  <span>Você ainda não possui cores de banner compradas na loja.</span>
                   <button
                     type="button"
                     onClick={() => openPopup("cosmetics_store", { data: {} })}
@@ -694,6 +784,168 @@ function ProfileContent({
                   </button>
                 </div>
               )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Avatar overlapping banner and Edit Profile trigger.
+          pointer-events-none on the row, auto on the things in it: the row is
+          pulled up over the banner by -mt-12 and spans the full width, so its
+          empty middle sat invisibly on top of the banner's bottom strip and
+          swallowed every click meant for the "alterar banner" button in that
+          corner. */}
+      <div className="pointer-events-none relative -mt-12 flex items-end justify-between px-5 sm:-mt-16 sm:px-6">
+        <div
+          className={`group pointer-events-auto relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 shadow-md sm:h-28 sm:w-28 ${
+            theme ? "" : "border-white bg-zinc-100 dark:border-zinc-950 dark:bg-zinc-900"
+          }`}
+          style={theme ? { borderColor: theme.ring, background: theme.surface } : undefined}
+        >
+          {/* No empty case left to handle: currentAvatar falls back to the
+              first default, so there is always a picture here. */}
+          <img
+            src={currentAvatar}
+            alt={account.displayName}
+            className="h-full w-full object-cover"
+          />
+          {/* Always visible on the picture, with the panel opening below it.
+              A plain positioned panel rather than the shared Popover: that one
+              anchors through Tippy, and here the trigger sits inside an
+              overflow-hidden circle — this is markup whose behaviour is
+              readable from the two elements involved. */}
+          {isEditing && (
+            <button
+              type="button"
+              onClick={() => setAvatarPickerOpen((open) => !open)}
+              aria-expanded={avatarPickerOpen}
+              aria-label="Alterar foto de perfil"
+              className="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/30 text-white transition-colors hover:bg-black/60 focus-visible:bg-black/60"
+            >
+              <MdEdit className="h-6 w-6 drop-shadow" />
+            </button>
+          )}
+        </div>
+
+        {/* Outside the avatar's own box on purpose: that one is
+            overflow-hidden to round the picture, and anything positioned
+            inside it is clipped to the circle. */}
+        {isEditing && avatarPickerOpen && (
+          <div
+            ref={avatarPickerRef}
+            className="pointer-events-auto absolute left-5 top-full z-30 mt-2 w-80 max-w-[calc(100%-2.5rem)] rounded-xl border border-zinc-200 bg-white p-3 shadow-lg sm:left-6 dark:border-zinc-800 dark:bg-zinc-950"
+          >
+                  {avatarOptions ? (
+                    <div className="flex flex-col gap-3">
+        {/* No close button: the popover closes on a click outside and on
+            Escape, and a second way out only takes room from the options. */}
+        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+          Foto de perfil
+        </span>
+
+        {/* currentAvatar, not previewAvatar: somebody who never chose
+            is *wearing* the first default everywhere else in the app,
+            so the picker has to show it as theirs. Marking nothing
+            would invite them to "pick" the avatar they already have
+            and then wonder why nothing changed.
+
+            "Remover foto" above stays on previewAvatar on purpose —
+            that one asks whether there is a stored picture to clear,
+            which is a different question. */}
+        <AvatarRow
+          label="Padrão"
+          paths={avatarOptions.defaults}
+          selected={currentAvatar}
+          onPick={handlePickPreset}
+        />
+
+        {avatarOptions.gallery.length > 0 && (
+          <div className={planRowClass(!avatarOptions.canUseGallery, "")}>
+            <PlanRing tier="pro" locked={!avatarOptions.canUseGallery} />
+            <AvatarRow
+            label="Avatares Pro"
+            paths={avatarOptions.gallery}
+            selected={currentAvatar}
+            onPick={handlePickPreset}
+            locked={!avatarOptions.canUseGallery}
+            lockedHint="Disponível no Pro"
+              lockedTier="pro"
+            />
+          </div>
+        )}
+
+        {/* The same hairline ring the form's sections wear, so the two paid
+            rows in here are told apart the same way they are outside. */}
+        <div className={planRowClass(!avatarOptions.canUpload, "flex flex-wrap items-center gap-2")}>
+          <PlanRing tier="proMax" locked={!avatarOptions.canUpload} />
+          <button
+            type="button"
+            disabled={!avatarOptions.canUpload}
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            <MdPhotoCamera className="h-3.5 w-3.5" />
+            Enviar minha imagem
+          </button>
+          {!avatarOptions.canUpload && (
+              <PlanLink tier="proMax" className="text-xs text-zinc-500 dark:text-zinc-400" />
+          )}
+        </div>
+      </div>
+                  ) : (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      {avatarOptionsError ?? "Carregando os avatares…"}
+                    </p>
+                  )}
+          </div>
+        )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={AVATAR_IMAGE_ACCEPT}
+          className="hidden"
+          onChange={handleAvatarPicked}
+        />
+
+        <input
+          ref={bannerInputRef}
+          type="file"
+          accept={AVATAR_IMAGE_ACCEPT}
+          className="hidden"
+          onChange={handleBannerPicked}
+        />
+
+        {isOwner && !isEditing && (
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            className="pointer-events-auto flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            <MdEdit className="h-3.5 w-3.5 text-zinc-500" />
+            Editar perfil
+          </button>
+        )}
+      </div>
+
+      <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+        {isEditing ? (
+          <form onSubmit={handleSave} className="mt-4 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-zinc-200 pb-3 dark:border-zinc-800">
+              <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">
+                Editar informações de usuário
+              </h2>
+              {previewAvatar && (
+                <button
+                  type="button"
+                  onClick={handleRemoveAvatar}
+                  className="flex items-center gap-1 text-xs font-medium text-red-600 transition hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                >
+                  <MdDeleteOutline className="h-4 w-4" />
+                  Remover foto
+                </button>
+              )}
             </div>
 
             {error && (
@@ -701,6 +953,133 @@ function ProfileContent({
                 {error}
               </p>
             )}
+
+            {/* Fundo do perfil. Drawn for everybody, locked for those without
+                the plan — same reasoning as the avatar rows: a perk nobody
+                sees is a perk nobody buys.
+
+                In a bordered panel, like the banner section below: the form
+                used to be a column of loose rows with no edges, so a heading
+                and the controls under it did not visibly belong together. */}
+            <PlanSection tier="proMax" title="Fundo do perfil" locked={!canEditTheme}>
+              {/* Shown to everybody and disabled without the plan, rather
+                  than replaced by a sentence: the controls are what explain
+                  the perk — two colours and a direction — and a line of text
+                  where they would be leaves somebody guessing what they would
+                  even be buying. */}
+              <fieldset disabled={!canEditTheme} className="contents">
+                <>
+                  <div
+                    className={`flex flex-wrap items-end gap-3 ${
+                      canEditTheme ? "" : "cursor-not-allowed opacity-50"
+                    }`}
+                  >
+                    <label className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+                      Cor 1
+                      <input
+                        type="color"
+                        value={isHexColor(editTheme?.from ?? "") ? editTheme!.from : "#18181b"}
+                        onChange={(e) =>
+                          setEditTheme((current) => ({
+                            from: e.target.value,
+                            to: current?.to ?? "#10b981",
+                            angle: current?.angle ?? 135,
+                          }))
+                        }
+                        className="h-9 w-14 cursor-pointer rounded-lg border border-zinc-300 bg-transparent dark:border-zinc-700"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+                      Cor 2
+                      <input
+                        type="color"
+                        value={isHexColor(editTheme?.to ?? "") ? editTheme!.to : "#10b981"}
+                        onChange={(e) =>
+                          setEditTheme((current) => ({
+                            from: current?.from ?? "#18181b",
+                            to: e.target.value,
+                            angle: current?.angle ?? 135,
+                          }))
+                        }
+                        className="h-9 w-14 cursor-pointer rounded-lg border border-zinc-300 bg-transparent dark:border-zinc-700"
+                      />
+                    </label>
+                    <label className="flex flex-1 flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+                      Direção
+                      <select
+                        value={editTheme?.angle ?? 135}
+                        onChange={(e) =>
+                          setEditTheme((current) => ({
+                            from: current?.from ?? "#18181b",
+                            to: current?.to ?? "#10b981",
+                            angle: Number(e.target.value),
+                          }))
+                        }
+                        className="h-9 w-full min-w-36 rounded-lg border border-zinc-300 bg-white px-2 text-xs text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                      >
+                        {GRADIENT_DIRECTIONS.map((direction) => (
+                          <option key={direction.angle} value={direction.angle}>
+                            {direction.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {canEditTheme && (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      {/* No preview swatch on purpose: the card behind this
+                          form already updates as the colours change, and a
+                          second sample would eventually disagree with it. */}
+                      O perfil acima já mostra o resultado. O texto vira claro ou escuro sozinho,
+                      conforme as cores escolhidas.
+                    </p>
+                  )}
+                  {editTheme && canEditTheme && (
+                    <button
+                      type="button"
+                      onClick={() => setEditTheme(null)}
+                      className="self-start text-xs font-medium text-red-600 transition hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                    >
+                      Voltar ao fundo padrão
+                    </button>
+                  )}
+                </>
+              </fieldset>
+            </PlanSection>
+
+            {/* Display Name */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                <label htmlFor="edit-display-name">Nome de exibição</label>
+                <span className="text-zinc-400">{editDisplayName.length}/24</span>
+              </div>
+              <input
+                id="edit-display-name"
+                type="text"
+                maxLength={24}
+                value={editDisplayName}
+                onChange={(e) => setEditDisplayName(e.target.value)}
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                required
+              />
+            </div>
+
+            {/* Bio */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                <label htmlFor="edit-bio">Descrição</label>
+                <span className="text-zinc-400">{editBio.length}/500</span>
+              </div>
+              <textarea
+                id="edit-bio"
+                rows={3}
+                maxLength={500}
+                value={editBio}
+                onChange={(e) => setEditBio(e.target.value)}
+                placeholder="Escreva algo sobre você..."
+                className="w-full resize-none rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              />
+            </div>
 
             {/* Actions */}
             <div className="mt-2 flex items-center justify-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
@@ -725,18 +1104,36 @@ function ProfileContent({
           <>
             <div className="flex flex-wrap items-end justify-between gap-3 pt-3">
               <div className="min-w-0">
-                <h1 className="flex items-center gap-1.5 truncate text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
+                <h1
+                  className="flex items-center gap-1.5 truncate text-2xl font-semibold text-zinc-950 dark:text-zinc-50"
+                  style={theme ? { color: theme.text } : undefined}
+                >
                   <span style={account.equippedNameColor ? { color: account.equippedNameColor } : undefined}>
                     {account.displayName}
                   </span>
                   <VerifiedBadge flags={account?.flags} className="h-6 w-6 shrink-0" />
                 </h1>
                 <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">@{account.username}</p>
+                  <p
+                    className="text-sm text-zinc-500 dark:text-zinc-400"
+                    style={theme ? { color: theme.muted } : undefined}
+                  >
+                    @{account.username}
+                  </p>
                   <UserBadges account={account} isOwner={isOwner} />
                 </div>
               </div>
-              <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-sm font-semibold text-amber-700 dark:text-amber-400">
+              <span
+                className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold ${
+                  theme
+                    ? ""
+                    : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                }`}
+                // Amber is a fixed accent that fights an arbitrary palette;
+                // themed, the pill borrows the card's own colours and the coin
+                // stays gold on its own.
+                style={theme ? { borderColor: theme.border, background: theme.surface, color: theme.text } : undefined}
+              >
                 <BsCoin className="h-4 w-4 shrink-0" />
                 {account.points ?? 0} pontos
               </span>
@@ -754,22 +1151,28 @@ function ProfileContent({
               </Link>
             )}
 
-            <p className="mt-4 whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300">
+            <p
+              className="mt-4 whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300"
+              style={theme ? { color: theme.muted } : undefined}
+            >
               {account.bio || "Sem descrição."}
             </p>
 
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <StatCard
+                theme={theme}
                 icon={<BsClock className="h-3.5 w-3.5" />}
                 label="Tempo em call"
                 seconds={account.callSeconds ?? 0}
               />
               <StatCard
+                theme={theme}
                 icon={<MicIcon className="h-3.5 w-3.5" />}
                 label="Tempo com o mic aberto"
                 seconds={account.micSeconds ?? 0}
               />
               <StatCard
+                theme={theme}
                 icon={<ScreenIcon className="h-3.5 w-3.5" />}
                 label="Tempo compartilhando tela"
                 seconds={account.shareSeconds ?? 0}

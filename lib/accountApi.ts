@@ -29,6 +29,12 @@ export type Account = {
   bio?: string | null;
   avatarUrl?: string | null;
   bannerUrl?: string | null;
+  /**
+   * The profile's gradient (see lib/profileTheme). Null for the default look,
+   * and also what the API sends once a Pro Max subscription lapses — hidden
+   * rather than deleted, same as the avatar and the banner.
+   */
+  profileTheme?: { from: string; to: string; angle: number } | null;
   // Cumulative seconds, tracked automatically by the signaling server —
   // never hand-edited. Absent on an older API response, same "reads as 0"
   // fallback as points.
@@ -335,6 +341,8 @@ export type UpdateProfileInput = {
   avatar?: string | null;
   /** Same three shapes as `avatar`: a data URL to upload, null to clear, absent to leave alone. */
   banner?: string | null;
+  /** Null clears the gradient; absent leaves it alone. */
+  profileTheme?: { from: string; to: string; angle: number } | null;
   equippedProfileColor?: string | null;
 };
 

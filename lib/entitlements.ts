@@ -31,7 +31,8 @@ export type Feature =
   | "no_ads"
   | "avatar_gallery"
   | "avatar_upload"
-  | "banner_upload";
+  | "banner_upload"
+  | "profile_gradient";
 
 export type FeatureTier = "free" | "account" | "premium" | "premium_max";
 
@@ -46,6 +47,7 @@ export const FEATURE_TIERS: Record<Feature, FeatureTier> = {
   avatar_gallery: "premium",
   avatar_upload: "premium_max",
   banner_upload: "premium_max",
+  profile_gradient: "premium_max",
 };
 
 /**

@@ -4860,7 +4860,7 @@ export function WatchRoom({ handle }: { handle: string }) {
                 carried is now what the subscription grants, so the button
                 points at the thing that sells it instead of at a donation
                 page — see app/pro. */}
-            <Tooltip content="GoLive Pro — Seja Verificado, transmita em 4K e 120fps" placement="bottom">
+            <Tooltip content="GoLive Pro — Seja Verificado, transmita em 4K/120fps e muito mais!" placement="bottom">
               <Link
                 href="/pro"
                 target="_blank"

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { SiteHeader } from "@/components/SiteHeader";
 import { ProPanel } from "./ProPanel";
 
-const TITLE = "GoLive Pro — seja Verificado, transmita em 4K 240 fps";
+const TITLE = "GoLive Pro — seja Verificado, transmita em 4K/120fps e muito mais!";
 const DESCRIPTION =
   "Assinatura mensal do GoLive: transmita a sua tela em 2K e 4K, com até 240 quadros por segundo.";
 
