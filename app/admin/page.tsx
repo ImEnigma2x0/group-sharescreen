@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AccountModal, type AccountModalMode } from "@/components/AccountModal";
 import { useAuth } from "@/lib/AuthContext";
 import { AdminLogPanel } from "./AdminLogPanel";
-import { DashboardPanel } from "./DashboardPanel";
+import { ADMIN_SECTIONS } from "./DashboardPanel";
 
 // Site administration: statistics, announcements, partners, supporters, the
 // desktop update nudge, anti-spam, banned words, bans, ads, comped plans — and
@@ -24,16 +24,20 @@ import { DashboardPanel } from "./DashboardPanel";
 // while the header said nobody was. Now it reads the same session everything
 // else does and checks for the flag the API already gates on (requireAdmin).
 
-type Tab = "painel" | "registros";
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: "painel", label: "Painel" },
+// The tab bar is generated from the sections (see DashboardPanel), with the
+// log pinned last. Adding a panel is one entry there; nothing here changes.
+//
+// Registros is last on purpose and not alphabetically: it is a record of what
+// was done, so it belongs after the doing — and it is the one tab that is read
+// rather than used.
+const TABS = [
+  ...ADMIN_SECTIONS.map((section) => ({ id: section.id, label: section.label })),
   { id: "registros", label: "Registros" },
 ];
 
 export default function AdminPage() {
   const { account, loading } = useAuth();
-  const [tab, setTab] = useState<Tab>("painel");
+  const [tab, setTab] = useState<string>(ADMIN_SECTIONS[0].id);
   const [accountModal, setAccountModal] = useState<AccountModalMode | null>(null);
 
   const isAdmin = Boolean(account?.flags.includes("ADMIN"));
@@ -104,14 +108,17 @@ export default function AdminPage() {
             signing out of it from this corner would also sign them out of the
             room they left open. The account menu in the header is where that
             lives, for the whole site at once. */}
-        <div className="mt-6 flex gap-1 border-b border-zinc-200 dark:border-zinc-800">
+        {/* Scrolls sideways rather than wrapping: a second row of tabs reads
+            as two groups of tabs, and on a phone that is most of the screen
+            before any content. */}
+        <div className="mt-6 flex gap-1 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800">
           {TABS.map((entry) => (
             <button
               key={entry.id}
               type="button"
               onClick={() => setTab(entry.id)}
               aria-current={tab === entry.id ? "page" : undefined}
-              className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition ${
+              className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition ${
                 tab === entry.id
                   ? "border-zinc-950 text-zinc-950 dark:border-zinc-50 dark:text-zinc-50"
                   : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
@@ -122,7 +129,16 @@ export default function AdminPage() {
           ))}
         </div>
 
-        <div className="mt-6">{tab === "painel" ? <DashboardPanel /> : <AdminLogPanel />}</div>
+        <div className="mt-6">
+          {tab === "registros" ? (
+            <AdminLogPanel />
+          ) : (
+            // Falls back to the first section rather than rendering nothing:
+            // the only way `tab` names no section is a stale value, and an
+            // empty page is a worse answer than the default one.
+            (ADMIN_SECTIONS.find((section) => section.id === tab) ?? ADMIN_SECTIONS[0]).Panel()
+          )}
+        </div>
       </div>
     </div>
   );
