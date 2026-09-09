@@ -790,9 +790,9 @@ function useBroadcastChannel(
     return requested ? capTier(requested, ceiling) : ceiling;
   }, []);
 
-  // What every viewer would actually be served right now — each one's request
-  // already capped by our ceiling, and every peer present, not only the ones
-  // who have reported a size yet.
+  // Who this share actually has to serve, and at what tier — each one's
+  // request already capped by our ceiling, and every peer who is watching,
+  // not only the ones who have reported a size yet.
   //
   // Both consumers need it in that form. The topology planner budgets the
   // room against these numbers, and budgeting against the raw request means
@@ -800,10 +800,27 @@ function useBroadcastChannel(
   // receiving — capacity that is reserved but unusable is exactly what tips a
   // room into a global downgrade it did not need. The encode-load estimate
   // has the same problem in the same direction.
+  //
+  // Which is the same argument that says a viewer who has asked us to stop
+  // does not belong here at all, and they used to. Nothing is encoded or sent
+  // for them, so every kbps and megapixel budgeted on their behalf is
+  // reserved against a stream that will never exist — and the sum is not
+  // small: a paused viewer has no tile, so they never report a size, so
+  // tierForPeer falls all the way back to the ceiling. Every person in the
+  // room with "entrar em transmissões automaticamente" off, and *everyone
+  // else* the moment somebody uses hyperfocus, was charged up to a full
+  // 1080p60 each. Ten of them is 50 Mbps and 1240 Mpx/s of demand that does
+  // not exist, which is enough on its own to push a room into a cascade and a
+  // global downgrade it had no need of.
+  //
+  // Leaving them out also takes them out of the planner's pool of candidate
+  // relays, which is right for the same reason: forwarding a stream requires
+  // receiving it, and they are not.
   const getRequestedTiers = useCallback(() => {
     const served = new Map<string, QualityTier>();
     for (const peer of signalingClient.state.peers) {
       if (peer.role === "moderator") continue;
+      if (viewerPausedPeers.current.has(peer.id)) continue;
       served.set(peer.id, tierForPeer(peer.id));
     }
     return served;
@@ -966,6 +983,16 @@ function useBroadcastChannel(
       // The two sets are read as alternatives everywhere (see WatchRoom's
       // tiles), and a peer in both is one peer with two contradictory tiles.
       clearResuming(peerId);
+      // Stop telling them what size to serve us, too. closeRecvPCFully has
+      // always done this for a peer who left; this path — the one hyperfocus
+      // and the auto-join gate take — never did, and it is the one that runs
+      // on almost everybody at once. After a hyperfocus in a room of eighty,
+      // seventy-nine entries went on re-announcing every twenty seconds for
+      // the life of the room, roughly four messages a second describing tiles
+      // nobody is rendering. Worse than the traffic: each one refreshes that
+      // broadcaster's record of what we want, so we were actively keeping
+      // alive the phantom demand getRequestedTiers now declines to budget.
+      if (channel !== "mic") qualityNegotiator.forget(channel as QualityChannel, peerId);
       setStoppedPeers((prev) => {
         if (prev.has(peerId)) return prev;
         const next = new Set(prev);

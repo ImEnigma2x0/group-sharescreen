@@ -16,6 +16,7 @@
 // a weak uplink, a weak CPU, or the everyone-goes-fullscreen case.
 
 import {
+  capTier,
   encodeMpxs,
   stepDown,
   tierIndex,
@@ -298,7 +299,25 @@ function allocate(
         // cuts the relay's upload and encode cost, limits how much quality
         // compounding re-encodes can destroy, and matches who actually ends
         // up deep in the tree (grid tiles, not fullscreen viewers).
-        const tier = stepDown(wanted.get(childId) ?? WORST_TIER, globalDowngrade + (childDepth - 1));
+        //
+        // Clamped back under what the viewer actually asked for, because a
+        // step down the *cost* ladder is not necessarily a step down in
+        // resolution: TIERS is ordered by cost, and 1440p30 sits below
+        // 1080p60 on it (deliberately — see its own comment). So a single
+        // depth penalty applied to a 1080p60 viewer produced "1440p30", a
+        // 2560-wide tier, for somebody whose broadcaster had capped them at
+        // 1920 and whose capture cannot exceed it either.
+        //
+        // Nothing looked wrong, because scaleFactorFor refuses to upscale and
+        // the picture came out 1080p30 regardless. The damage was to the
+        // arithmetic on this very line: the planner budgeted that child at
+        // 1440p30's cost — 4500 kbps and 111 Mpx/s against a real 3000 and 62,
+        // half again the upload and nearly double the encode — for every
+        // viewer one hop down. Over-charging a relay is exactly how it ends up
+        // with fewer children than it can carry, which deepens the tree and
+        // spends global downgrade levels the room never needed.
+        const want = wanted.get(childId) ?? WORST_TIER;
+        const tier = capTier(stepDown(want, globalDowngrade + (childDepth - 1)), want);
         if (slotsFor(parent, tier, contentMultiplier) < 1) {
           i += 1;
           continue;

@@ -321,22 +321,27 @@ export function useMeshTopology(
     const requestedTiers = getRequestedTiers();
     const contentMultiplier = getContentMultiplier();
 
-    const viewers: PlannerViewer[] = signalingClient.state.peers
-      .filter((p) => p.role !== "moderator")
-      .map((p) => {
-        const cap = peerCapacities.get(p.id);
-        return {
-          id: p.id,
-          uploadKbps: cap?.uploadKbps ?? 0,
-          encodeMpxs: cap?.encodeMpxs ?? 0,
-          stableSeconds: cap ? Math.round((now - cap.firstSeenAt) / 1000) : 0,
-          // A peer we have never heard capacity from cannot be trusted to
-          // relay; silence is not evidence of capability.
-          eligibleRelay: cap?.eligibleRelay ?? false,
-          measured: cap?.measured ?? false,
-          wantTier: requestedTiers.get(p.id) ?? "720p30",
-        };
-      });
+    // Driven by the tier map rather than by the raw peer list, because that
+    // map is the answer to "who does this share have to serve", moderators
+    // and viewers who asked us to stop already excluded (see useRoomMedia's
+    // getRequestedTiers). Walking the peer list and looking each one up here
+    // put every one of those omissions straight back in at the `?? "720p30"`
+    // fallback — 1500 kbps and 28 Mpx/s apiece of demand for a stream nobody
+    // is receiving, which is most of what the omission was for.
+    const viewers: PlannerViewer[] = [...requestedTiers].map(([id, wantTier]) => {
+      const cap = peerCapacities.get(id);
+      return {
+        id,
+        uploadKbps: cap?.uploadKbps ?? 0,
+        encodeMpxs: cap?.encodeMpxs ?? 0,
+        stableSeconds: cap ? Math.round((now - cap.firstSeenAt) / 1000) : 0,
+        // A peer we have never heard capacity from cannot be trusted to
+        // relay; silence is not evidence of capability.
+        eligibleRelay: cap?.eligibleRelay ?? false,
+        measured: cap?.measured ?? false,
+        wantTier,
+      };
+    });
 
     if (viewers.length === 0) {
       missStreak = 0;
@@ -363,6 +368,12 @@ export function useMeshTopology(
     // back to its uniform-downgrade path on its own (the same one it already
     // uses for peers it has no capacity report from at all), so this needs
     // no other change here.
+    //
+    // "Room size" now means the people actually receiving this share, not the
+    // headcount, since `viewers` no longer carries anyone who asked us to
+    // stop. That is the right reading for this particular question: a cascade
+    // is worth its cost against the number of streams being served, and forty
+    // people watching nothing do not make one worth building.
     const roomSize = viewers.length + 1;
     const plannerViewers =
       roomSize > CASCADE_ROOM_SIZE_THRESHOLD
