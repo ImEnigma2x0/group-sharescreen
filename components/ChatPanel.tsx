@@ -983,7 +983,13 @@ export function ChatPanel({
                             and drop this header entirely (see `grouped`), so a
                             gutter would be empty for most rows and the text
                             would be indented past nothing. */}
-                        <UserAvatar src={m.avatarUrl} name={m.name} size={20} />
+                        <UserAvatar
+                          src={m.avatarUrl}
+                          name={m.name}
+                          size={20}
+                          userId={m.userId}
+                          isGuest={m.isGuest}
+                        />
                         <span className="flex min-w-0 items-baseline gap-1.5">
                         {/* Clickable only for a real account: a guest has no
                             profile to open, and `userId` is absent on messages
@@ -1376,7 +1382,7 @@ export function ChatPanel({
                     : "Anexar imagem (ou cole com Ctrl+V)"
               }
               content={
-                <div className="flex w-52 flex-col p-1">
+                <div className="flex w-52 flex-col rounded-lg border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
                   <button
                     type="button"
                     onClick={() => {

@@ -27,6 +27,8 @@ import {
   type DmReplyTo,
 } from "@/lib/dmApi";
 import type { SocialUser } from "@/lib/socialApi";
+import { PresenceDot } from "@/components/PresenceDot";
+import { usePresenceMap } from "@/lib/presence";
 
 // Private messages, in a dialog.
 //
@@ -94,6 +96,9 @@ export function DirectMessagesModal({
   const { account } = useAuth();
   const { recentDms } = useSignaling();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  // Every name in the conversation list gets a dot, and the thread header
+  // reads out of this same table (see `activeUser` below).
+  const presence = usePresenceMap(conversations.map((c) => c.user.id));
   // The loaded thread, tagged with whose it is. Tagging is what lets the
   // "which thread is open" question be answered by the store alone: a thread
   // whose userId does not match the one being asked for is simply stale, and
@@ -307,11 +312,18 @@ export function DirectMessagesModal({
                       className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-zinc-100 dark:hover:bg-zinc-900"
                     >
                       <span className="min-w-0 flex-1">
-                        <DisplayUserName
-                          name={conversation.user.displayName}
-                          verified={verifiedBadge(conversation.user.flags)}
-                          className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
-                        />
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <PresenceDot
+                            state={presence[conversation.user.id] ?? null}
+                            size={8}
+                            ringClassName="ring-white dark:ring-zinc-950"
+                          />
+                          <DisplayUserName
+                            name={conversation.user.displayName}
+                            verified={verifiedBadge(conversation.user.flags)}
+                            className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
+                          />
+                        </span>
                         <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
                           {conversation.lastMessage.text}
                         </span>

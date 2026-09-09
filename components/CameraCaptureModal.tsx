@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { MdCameraAlt, MdClose, MdFlipCameraAndroid } from "react-icons/md";
+import { MdCameraAlt, MdCheck, MdClose, MdFlipCameraAndroid, MdVideocam } from "react-icons/md";
+import { isMobileDevice } from "@/lib/announcement";
 
 const subscribeNothing = () => () => {};
 
@@ -52,10 +53,29 @@ export function CameraCaptureModal({
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
-  // Only worth offering the flip button where there is something to flip to —
-  // a laptop with one webcam shouldn't show a control that does nothing.
-  const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
+  // The camera asked for by name, once somebody has picked one from the list.
+  // Null means "whichever one `facingMode` gets us", which is how it starts
+  // and the only mode a phone ever uses.
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  // What the running stream actually settled on — not necessarily what was
+  // asked for, since `facingMode` is a preference the browser is free to
+  // resolve however it likes. It's what the list ticks.
+  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
+  // Every camera attached to this machine. Empty until permission is granted:
+  // before that the browser hands back an unusable, label-less list.
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [cameraListOpen, setCameraListOpen] = useState(false);
   const [capturing, setCapturing] = useState(false);
+
+  // A phone gets the front/back toggle it already had — its two cameras are
+  // "the one facing you" and "the other one", and a list of them by name says
+  // less than the toggle does. A computer gets the actual list: "HD Webcam",
+  // "Câmera USB", a capture card — things `facingMode` cannot choose between,
+  // since desktop browsers ignore it entirely.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    setIsMobile(isMobileDevice());
+  }, []);
 
   const stopStream = useCallback(() => {
     const stream = streamRef.current;
@@ -82,7 +102,10 @@ export function CameraCaptureModal({
         }
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode,
+            // `exact`, so picking a camera by name either gets that camera or
+            // fails loudly — a silent fall back to another one would look
+            // like the list simply doesn't work.
+            ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode }),
             width: { ideal: 1920 },
             height: { ideal: 1080 },
           },
@@ -100,17 +123,18 @@ export function CameraCaptureModal({
             await videoRef.current.play();
           } catch {}
         }
-        if (!cancelled) setReady(true);
+        if (!cancelled) {
+          setReady(true);
+          setActiveDeviceId(stream.getVideoTracks()[0]?.getSettings().deviceId ?? null);
+        }
 
         // Only after permission has been granted: before that, labels and
-        // even the device list are withheld, so counting cameras first would
-        // undercount and hide the flip button on the phones that need it.
+        // even the device list are withheld, so listing cameras first would
+        // undercount and hide the button on the machines that need it.
         try {
           const devices = await navigator.mediaDevices.enumerateDevices();
           if (!cancelled) {
-            setHasMultipleCameras(
-              devices.filter((d) => d.kind === "videoinput").length > 1
-            );
+            setCameras(devices.filter((d) => d.kind === "videoinput"));
           }
         } catch {}
       } catch (err) {
@@ -125,12 +149,18 @@ export function CameraCaptureModal({
       cancelled = true;
       stopStream();
     };
-  }, [open, facingMode, stopStream]);
+  }, [open, facingMode, deviceId, stopStream]);
 
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      // The camera list is the innermost thing open, so it's the first thing
+      // Escape takes back.
+      setCameraListOpen((listOpen) => {
+        if (!listOpen) onClose();
+        return false;
+      });
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
@@ -142,6 +172,7 @@ export function CameraCaptureModal({
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = originalOverflow;
+      setCameraListOpen(false);
     };
   }, [open]);
 
@@ -200,7 +231,13 @@ export function CameraCaptureModal({
     >
       <div
         className="flex w-full max-w-2xl flex-col gap-3"
-        onClick={(e) => e.stopPropagation()}
+        // Stops the backdrop's own close, and doubles as the camera list's
+        // "clicked somewhere else" — the list and its trigger keep their
+        // clicks to themselves.
+        onClick={(e) => {
+          e.stopPropagation();
+          setCameraListOpen(false);
+        }}
       >
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white">Tirar uma foto</h2>
@@ -235,17 +272,76 @@ export function CameraCaptureModal({
         </div>
 
         <div className="flex items-center justify-center gap-3">
-          {hasMultipleCameras && (
-            <button
-              type="button"
-              onClick={() => setFacingMode((mode) => (mode === "user" ? "environment" : "user"))}
-              title="Alternar câmera"
-              aria-label="Alternar câmera"
-              className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-zinc-900/80 text-zinc-200 backdrop-blur transition hover:bg-zinc-800 hover:text-white"
-            >
-              <MdFlipCameraAndroid className="h-5 w-5" />
-            </button>
-          )}
+          {cameras.length > 1 &&
+            (isMobile ? (
+              <button
+                type="button"
+                onClick={() => setFacingMode((mode) => (mode === "user" ? "environment" : "user"))}
+                title="Alternar câmera"
+                aria-label="Alternar câmera"
+                className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-zinc-900/80 text-zinc-200 backdrop-blur transition hover:bg-zinc-800 hover:text-white"
+              >
+                <MdFlipCameraAndroid className="h-5 w-5" />
+              </button>
+            ) : (
+              // `relative` so the list hangs above the button instead of
+              // pushing the controls row around as it opens.
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCameraListOpen((listOpen) => !listOpen);
+                  }}
+                  title="Escolher câmera"
+                  aria-label="Escolher câmera"
+                  aria-haspopup="listbox"
+                  aria-expanded={cameraListOpen}
+                  className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-zinc-900/80 text-zinc-200 backdrop-blur transition hover:bg-zinc-800 hover:text-white"
+                >
+                  <MdFlipCameraAndroid className="h-5 w-5" />
+                </button>
+                {cameraListOpen && (
+                  <div
+                    role="listbox"
+                    aria-label="Câmeras disponíveis"
+                    className="absolute bottom-full left-1/2 mb-2 flex max-h-56 w-64 -translate-x-1/2 flex-col overflow-y-auto rounded-lg border border-white/10 bg-zinc-900 p-1 shadow-xl"
+                  >
+                    {cameras.map((camera, index) => {
+                      // A label needs permission for *that* camera, which a
+                      // machine with several does not necessarily give all at
+                      // once — so an unnamed one is still listed, by position.
+                      const label = camera.label || `Câmera ${index + 1}`;
+                      const isActive = camera.deviceId === activeDeviceId;
+                      return (
+                        <button
+                          key={camera.deviceId || index}
+                          type="button"
+                          role="option"
+                          aria-selected={isActive}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCameraListOpen(false);
+                            setDeviceId(camera.deviceId);
+                          }}
+                          className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs transition ${
+                            isActive
+                              ? "bg-zinc-800 font-medium text-white"
+                              : "text-zinc-300 hover:bg-zinc-800/70 hover:text-white"
+                          }`}
+                        >
+                          <MdVideocam className="h-4 w-4 shrink-0 text-zinc-400" aria-hidden />
+                          <span className="min-w-0 flex-1 truncate">{label}</span>
+                          {isActive && (
+                            <MdCheck className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
           <button
             type="button"
             onClick={takePhoto}

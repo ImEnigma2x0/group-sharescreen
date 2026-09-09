@@ -48,12 +48,18 @@ export function ParticipantRow({
   isAdmin = false,
   isApp = false,
   isMobileApp = false,
+  background = false,
   renderMenu,
   onContextMenu,
 }: {
   name: string;
   isSelf?: boolean;
   isGuest?: boolean;
+  // Their app is behind something right now (see PeerInfo.background) — the
+  // presence dot on the avatar turns blue instead of green. Read from the
+  // room rather than looked up per account, which is what gives a guest one
+  // too: being in this list *is* being connected.
+  background?: boolean;
   // Account id (see server/signaling.ts's peerSummary) — only ever a real,
   // viewable profile when the peer isn't a guest. Undefined for a peer sent
   // by an older server version that doesn't include it yet, same as isGuest.
@@ -194,7 +200,19 @@ export function ParticipantRow({
           the avatar sitting low. The name is the only text here, so there is
           no baseline relationship left to preserve. */}
       <span className="flex min-w-0 items-center gap-1">
-        <UserAvatar src={avatarUrl} name={name} size={22} />
+        <UserAvatar
+          src={avatarUrl}
+          name={name}
+          size={22}
+          presence={background ? "background" : "online"}
+          // The row's own background, not the page's — your own row is
+          // tinted, and a white ring on it would read as a hole.
+          presenceRingClassName={
+            isSelf
+              ? "ring-zinc-100 dark:ring-zinc-900"
+              : "ring-white dark:ring-zinc-950"
+          }
+        />
         {canOpenDialog && onOpenProfile ? (
           // A button, not a styled link: this goes nowhere, and marking it up
           // as navigation would promise a middle-click and a "copy link

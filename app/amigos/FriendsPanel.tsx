@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { MdBlock, MdCall, MdChatBubbleOutline, MdCheck, MdClose, MdPersonRemove } from "react-icons/md";
 import { DisplayUserName } from "@/components/DisplayUserName";
+import { PresenceDot } from "@/components/PresenceDot";
+import { usePresence } from "@/lib/presence";
 import { AccountModal, type AccountModalMode } from "@/components/AccountModal";
 import { useAuth } from "@/lib/AuthContext";
 import { hasVerifiedBadge, verifiedBadge } from "@/lib/entitlements";
@@ -32,14 +34,20 @@ function Row({
   user: SocialUser;
   children?: React.ReactNode;
 }) {
+  // No picture in this list, so the dot sits against the name — the one
+  // place it is the row's only face.
+  const presence = usePresence(user.id);
   return (
     <li className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950">
       <Link href={`/user/${user.username}`} className="min-w-0 flex-1 hover:underline">
-        <DisplayUserName
-          name={user.displayName}
-          verified={verifiedBadge(user.flags)}
-          className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
-        />
+        <span className="flex min-w-0 items-center gap-1.5">
+          <PresenceDot state={presence} size={8} ringClassName="ring-white dark:ring-zinc-950" />
+          <DisplayUserName
+            name={user.displayName}
+            verified={verifiedBadge(user.flags)}
+            className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
+          />
+        </span>
         <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
           @{user.username}
         </span>

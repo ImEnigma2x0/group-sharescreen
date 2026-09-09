@@ -44,7 +44,13 @@ function HitRow({
   return (
     <li className="flex items-center gap-2.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-2 dark:border-zinc-800 dark:bg-zinc-950">
       <Link href={`/user/${hit.username}`} className="flex min-w-0 flex-1 items-center gap-2.5">
-        <UserAvatar src={hit.avatarUrl} name={hit.displayName} size={32} className="shrink-0" />
+        <UserAvatar
+          src={hit.avatarUrl}
+          name={hit.displayName}
+          size={32}
+          className="shrink-0"
+          userId={hit.id}
+        />
         <span className="min-w-0 flex-1">
           <DisplayUserName
             name={hit.displayName}

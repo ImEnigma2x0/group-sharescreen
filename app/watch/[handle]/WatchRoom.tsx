@@ -4503,6 +4503,7 @@ export function WatchRoom({ handle }: { handle: string }) {
             isAdmin={state.roomAdmins.some((a) => a.id === p.userId)}
             isApp={p.app}
             isMobileApp={p.mobileApp}
+            background={p.background}
             verified={verifiedBadge(p?.flags)}
             nameColor={p.nameColor}
             micOn={p.mic}

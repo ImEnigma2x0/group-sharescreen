@@ -9,6 +9,8 @@ import { BsCoin, BsClock, BsShop } from "react-icons/bs";
 import { SocialActions } from "@/components/SocialActions";
 import { useAuth } from "@/lib/AuthContext";
 import { useSignaling } from "@/lib/useSignaling";
+import { usePresence } from "@/lib/presence";
+import { PresenceDot } from "@/components/PresenceDot";
 import { signalingClient } from "@/lib/signalingClient";
 import { getAccountToken, fetchAvatarOptions, type AvatarOptions } from "@/lib/accountApi";
 import { hasFeature } from "@/lib/entitlements";
@@ -490,6 +492,9 @@ function ProfileContent({
   const { openPopup } = useNtPopups();
   const { account, live } = profile;
   const isOwner = Boolean(authAccount && authAccount.id === account.id);
+  // The same dot the participant list and the friends list draw, on the one
+  // screen that is entirely about this person.
+  const presence = usePresence(account.id);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editDisplayName, setEditDisplayName] = useState(account.displayName);
@@ -984,6 +989,19 @@ function ProfileContent({
             </button>
           )}
         </div>
+
+        {/* Outside the avatar's box for the same reason the picker below is:
+            that box is overflow-hidden to round the picture, so a dot
+            positioned inside it would be clipped away at the corner. */}
+        <PresenceDot
+          state={presence}
+          size={18}
+          ringClassName="ring-white dark:ring-zinc-950"
+          // Parked on the avatar box's bottom-right corner, in the row's
+          // coordinates: px-5 (20px) + w-24 (96px) puts that corner at 116px,
+          // less half the dot; the sm: pair is the same sum with px-6 and w-28.
+          className="pointer-events-none absolute bottom-1 left-[6.4rem] z-10 sm:left-[7.6rem]"
+        />
 
         {/* Outside the avatar's own box on purpose: that one is
             overflow-hidden to round the picture, and anything positioned

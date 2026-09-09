@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { PresenceDot } from "@/components/PresenceDot";
+import { usePresence } from "@/lib/presence";
+import type { PresenceState } from "@/lib/signalingClient";
 
 // One face, drawn the same way everywhere it appears.
 //
@@ -57,12 +60,28 @@ export function UserAvatar({
   name,
   size = 24,
   className = "",
+  userId,
+  isGuest,
+  presence,
+  presenceRingClassName,
 }: {
   src?: string | null;
   name: string;
   /** Rendered size in pixels — the circle is always square. */
   size?: number;
   className?: string;
+  /** Whose face this is (see the server's stableUserId). Passing it is what
+   *  puts the presence dot on the avatar — every face that names its person
+   *  gets one, which is why this lives here rather than at each call site. */
+  userId?: string | null;
+  /** Guests have no account and therefore no presence to ask about. */
+  isGuest?: boolean;
+  /** An already-known presence, for a caller that has it without asking — a
+   *  room's participant list, where being listed *is* being connected (see
+   *  lib/presence.ts's peerPresence). Takes precedence over `userId`. */
+  presence?: PresenceState | null;
+  /** The surface the dot sits on, when it is not the page background. */
+  presenceRingClassName?: string;
 }) {
   const shown = src || DEFAULT_AVATAR_PATH;
   const [failed, setFailed] = useState(false);
@@ -74,11 +93,34 @@ export function UserAvatar({
     setFailed(false);
   }
 
+  // Called unconditionally, as every hook must be — it no-ops for a guest and
+  // for a caller that passed no id (see usePresence).
+  const watched = usePresence(userId, isGuest);
+  const state = presence !== undefined ? presence : watched;
+
   const style = { width: size, height: size };
   const shared = `shrink-0 rounded-full object-cover ${className}`;
 
+  // Wrapped only when there is actually a dot to place: an avatar with nobody
+  // online behind it stays the single element every layout here was built
+  // around.
+  const withDot = (face: ReactNode) =>
+    !state || state === "offline" ? (
+      face
+    ) : (
+      <span className="relative inline-flex shrink-0" style={style}>
+        {face}
+        <PresenceDot
+          state={state}
+          size={Math.max(8, Math.round(size * 0.32))}
+          ringClassName={presenceRingClassName}
+          className="absolute right-0 bottom-0"
+        />
+      </span>
+    );
+
   if (failed) {
-    return (
+    return withDot(
       <span
         aria-hidden
         style={style}
@@ -89,10 +131,11 @@ export function UserAvatar({
     );
   }
 
-  return (
-    // eslint-disable-next-line @next/next/no-img-element -- the source is a
-    // user-chosen CDN URL or a static preset, neither of which next/image can
-    // optimise without a remote-pattern list that changes with the CDN.
+  return withDot(
+    // The source is a user-chosen CDN URL or a static preset, neither of which
+    // next/image can optimise without a remote-pattern list that changes with
+    // the CDN.
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={shown}
       alt=""

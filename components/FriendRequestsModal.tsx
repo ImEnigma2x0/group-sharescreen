@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { MdCheck, MdClose } from "react-icons/md";
 import { DisplayUserName } from "@/components/DisplayUserName";
+import { PresenceDot } from "@/components/PresenceDot";
+import { usePresenceMap } from "@/lib/presence";
 import { hasVerifiedBadge, verifiedBadge } from "@/lib/entitlements";
 import { acceptFriend, removeFriend } from "@/lib/socialApi";
 import { useSocialGraph } from "@/lib/useSocialGraph";
@@ -17,6 +19,9 @@ import { useSocialGraph } from "@/lib/useSocialGraph";
 
 export function FriendRequestsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { graph, refresh } = useSocialGraph();
+  // Subscribed here rather than per row: a hook cannot live inside the map
+  // below, and the list is what knows who is on screen anyway.
+  const presence = usePresenceMap(graph.incoming.map((user) => user.id));
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -83,11 +88,18 @@ export function FriendRequestsModal({ open, onClose }: { open: boolean; onClose:
                 className="flex items-center gap-3 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800"
               >
                 <span className="min-w-0 flex-1">
-                  <DisplayUserName
-                    name={user.displayName}
-                    verified={verifiedBadge(user.flags)}
-                    className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
-                  />
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <PresenceDot
+                      state={presence[user.id] ?? null}
+                      size={8}
+                      ringClassName="ring-white dark:ring-zinc-950"
+                    />
+                    <DisplayUserName
+                      name={user.displayName}
+                      verified={verifiedBadge(user.flags)}
+                      className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
+                    />
+                  </span>
                   <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
                     @{user.username}
                   </span>

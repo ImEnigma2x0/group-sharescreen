@@ -141,7 +141,20 @@ export type PeerInfo = {
   // ParticipantRow shows a phone icon for these and a monitor for those.
   // Undefined from a server that predates it, read the same as `false`.
   mobileApp?: boolean;
+  // Whether this peer's app is behind something right now — a minimised
+  // window, another tab, a phone in a pocket (see the server's
+  // ClientInfo.backgrounded and the "peer-app-state" message). Drives the blue
+  // presence dot in the participant list, which is why it is read from the
+  // peer rather than from the account: a guest is in the room like anybody
+  // else and has no account to ask about. Undefined from a server that
+  // predates it, read the same as `false`.
+  background?: boolean;
 };
+
+/** The dot beside a person's name (see lib/presence.ts and the API's presence
+ *  sweep). "offline" is a real value on the wire — it is the answer to a
+ *  question that was asked, as opposed to an id nobody has answered yet. */
+export type PresenceState = "online" | "background" | "offline";
 
 export type SignalingStatus = "idle" | "connecting" | "open" | "closed" | "superseded" | "banned";
 
@@ -446,6 +459,11 @@ export type SignalingState = {
   // disagree — which for "are we friends?" is the one thing that must not
   // happen. See lib/useSocialGraph.ts.
   socialSeq: number;
+  // Presence of the accounts this tab asked about, by account id (see
+  // watchPresence). Only ever holds ids somebody subscribed to — this is a
+  // cache of answers, not a directory of the site.
+  presence: Record<string, PresenceState>;
+  presenceSeq: number;
   // The last direct message this connection was handed, and a counter beside
   // it. Same shape and same reason as `partner`/`partnerSeq`: the message is
   // the payload, the counter is what tells "a new one arrived" apart from
@@ -660,6 +678,8 @@ const initialState: SignalingState = {
   adsterraEnabled: null,
   adsConfigSeq: 0,
   socialSeq: 0,
+  presence: {},
+  presenceSeq: 0,
   lastDm: null,
   dmSeq: 0,
   recentDms: [],
@@ -1043,6 +1063,13 @@ class SignalingClient {
       this.reconnectAttempts = 0;
       this.setState({ status: "open" });
       this.startClockSync();
+      // The presence subscription belongs to the connection, so a reconnect
+      // starts with none — without this, a page that stayed open through a
+      // network blip would keep showing the dots it had when the socket died,
+      // frozen, with nothing ever correcting them.
+      if (this.watchedPresenceIds.length > 0) {
+        this.rawSend({ type: "presence-watch", ids: this.watchedPresenceIds });
+      }
       if (this.desiredName) this.sendRegister(this.desiredName);
     };
 
@@ -1764,6 +1791,30 @@ class SignalingClient {
       case "social-update":
         this.setState({ socialSeq: this.state.socialSeq + 1 });
         break;
+      // A presence snapshot (the answer to a watch) or a delta (the sweep
+      // noticing somebody moved). Merged rather than replaced — the two are
+      // the same message, and a delta about one friend says nothing about the
+      // rest.
+      case "presence-state": {
+        const incoming = msg.presence;
+        if (!incoming || typeof incoming !== "object") break;
+        const presence = { ...this.state.presence };
+        for (const [id, value] of Object.entries(incoming as Record<string, unknown>)) {
+          if (value === "online" || value === "background" || value === "offline") {
+            presence[id] = value;
+          }
+        }
+        this.setState({ presence, presenceSeq: this.state.presenceSeq + 1 });
+        break;
+      }
+      // Somebody in the room minimised the app or came back to it.
+      case "peer-app-state":
+        this.setState({
+          peers: this.state.peers.map((p) =>
+            p.id === msg.id ? { ...p, background: Boolean(msg.background) } : p
+          ),
+        });
+        break;
       case "ads-config":
         this.setState({
           adsterraEnabled:
@@ -1938,6 +1989,26 @@ class SignalingClient {
     if (path === this.currentPath) return;
     this.currentPath = path;
     this.rawSend({ type: "presence", path });
+  }
+
+  // The account ids this tab currently wants presence for (see
+  // watchPresence). Kept so a reconnect can re-state them: the subscription
+  // lives on the server's connection, so a fresh socket knows nothing about
+  // what the page is still showing.
+  private watchedPresenceIds: string[] = [];
+
+  /**
+   * Ask to be told when these accounts come online, go into the background or
+   * disappear — the presence dots (see lib/presence.ts, which is what calls
+   * this; components ask that store, never this method).
+   *
+   * Replaces the whole subscription each time, matching the server's own
+   * semantics: the argument is "who this tab is showing right now", so a
+   * friends list that was closed stops costing anything the moment it is.
+   */
+  watchPresence(ids: string[]) {
+    this.watchedPresenceIds = ids;
+    this.rawSend({ type: "presence-watch", ids });
   }
 
   /**

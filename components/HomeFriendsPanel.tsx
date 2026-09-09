@@ -74,6 +74,7 @@ function FriendRow({
           name={user.displayName}
           size={32}
           className="shrink-0"
+          userId={user.id}
         />
         <span className="min-w-0 flex-1">
           <DisplayUserName
