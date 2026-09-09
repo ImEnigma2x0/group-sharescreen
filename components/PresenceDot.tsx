@@ -3,10 +3,11 @@
 import { PRESENCE_LABELS } from "@/lib/presence";
 import type { PresenceState } from "@/lib/signalingClient";
 
-// The dot itself. Green for "looking at it", blue for "app open behind
-// something", and nothing at all for offline — an absence rather than a grey
-// dot, because a grey dot is a thing on the screen that says nothing, and the
-// list it appears in is long.
+// The dot itself. Green for "looking at it", blue for a browser tab they are
+// not looking at, yellow for the installed app left running behind something,
+// and nothing at all for offline — an absence rather than a grey dot, because
+// a grey dot is a thing on the screen that says nothing, and the list it
+// appears in is long.
 //
 // It carries a title and a screen-reader label rather than relying on the
 // colour: two dots that differ only in hue are two dots that are the same for
@@ -15,7 +16,8 @@ import type { PresenceState } from "@/lib/signalingClient";
 
 const COLORS: Record<Exclude<PresenceState, "offline">, string> = {
   online: "bg-emerald-500",
-  background: "bg-sky-500",
+  away: "bg-sky-500",
+  background: "bg-amber-400",
 };
 
 export function PresenceDot({

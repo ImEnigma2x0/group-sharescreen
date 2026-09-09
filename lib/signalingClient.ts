@@ -141,20 +141,21 @@ export type PeerInfo = {
   // ParticipantRow shows a phone icon for these and a monitor for those.
   // Undefined from a server that predates it, read the same as `false`.
   mobileApp?: boolean;
-  // Whether this peer's app is behind something right now — a minimised
-  // window, another tab, a phone in a pocket (see the server's
-  // ClientInfo.backgrounded and the "peer-app-state" message). Drives the blue
-  // presence dot in the participant list, which is why it is read from the
-  // peer rather than from the account: a guest is in the room like anybody
-  // else and has no account to ask about. Undefined from a server that
-  // predates it, read the same as `false`.
-  background?: boolean;
+  // This peer's own presence — in front of them, in a tab they are not
+  // looking at, or an installed app left running behind something (see the
+  // server's connectionPresence and the "peer-presence" message). Drives the
+  // dot in the participant list, and is read from the peer rather than from
+  // the account: a guest is in the room like anybody else and has no account
+  // to ask about. Undefined from a server that predates it, read as "online" —
+  // being listed here does mean being connected.
+  presence?: Exclude<PresenceState, "offline">;
 };
 
 /** The dot beside a person's name (see lib/presence.ts and the API's presence
- *  sweep). "offline" is a real value on the wire — it is the answer to a
- *  question that was asked, as opposed to an id nobody has answered yet. */
-export type PresenceState = "online" | "background" | "offline";
+ *  sweep): green, yellow, blue, none. "offline" is a real value on the wire —
+ *  it is the answer to a question that was asked, as opposed to an id nobody
+ *  has answered yet. */
+export type PresenceState = "online" | "away" | "background" | "offline";
 
 export type SignalingStatus = "idle" | "connecting" | "open" | "closed" | "superseded" | "banned";
 
@@ -1800,21 +1801,27 @@ class SignalingClient {
         if (!incoming || typeof incoming !== "object") break;
         const presence = { ...this.state.presence };
         for (const [id, value] of Object.entries(incoming as Record<string, unknown>)) {
-          if (value === "online" || value === "background" || value === "offline") {
+          if (
+            value === "online" ||
+            value === "away" ||
+            value === "background" ||
+            value === "offline"
+          ) {
             presence[id] = value;
           }
         }
         this.setState({ presence, presenceSeq: this.state.presenceSeq + 1 });
         break;
       }
-      // Somebody in the room minimised the app or came back to it.
-      case "peer-app-state":
+      // Somebody in the room switched away from it or came back.
+      case "peer-presence": {
+        const presence = msg.presence;
+        if (presence !== "online" && presence !== "away" && presence !== "background") break;
         this.setState({
-          peers: this.state.peers.map((p) =>
-            p.id === msg.id ? { ...p, background: Boolean(msg.background) } : p
-          ),
+          peers: this.state.peers.map((p) => (p.id === msg.id ? { ...p, presence } : p)),
         });
         break;
+      }
       case "ads-config":
         this.setState({
           adsterraEnabled:

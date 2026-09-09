@@ -9,10 +9,16 @@ import { useSignaling } from "./useSignaling";
 // Three states, decided by the server from the connections an account has open
 // (see the API's presence sweep):
 //
-//   "online"     — the app is in front of them somewhere. Green.
-//   "background" — connected, but every one of their devices says it is behind
-//                  something: minimised, another tab, a phone in a pocket. Blue.
+//   "online"     — the site or the app is in front of them. Green.
+//   "away"       — the site is open in a browser that is showing something
+//                  else: another tab, another window. Blue.
+//   "background" — the installed app left running behind something: closed to
+//                  the tray, minimised, an Android app in the background.
+//                  Yellow.
 //   "offline"    — no connection at all. No dot.
+//
+// Somebody with several devices is whichever of them is most present, in that
+// order — a phone in a pocket says nothing about the laptop in front of them.
 //
 // This module is the only thing components talk to. It exists because the
 // subscription is per *connection* while the interest is per *component*: a
@@ -111,12 +117,13 @@ export function usePresenceMap(ids: (string | null | undefined)[]): Record<strin
  * *instant*, since the room is told directly when somebody minimises the app
  * (see the API's "peer-app-state").
  */
-export function peerPresence(peer: Pick<PeerInfo, "background">): PresenceState {
-  return peer.background ? "background" : "online";
+export function peerPresence(peer: Pick<PeerInfo, "presence">): PresenceState {
+  return peer.presence ?? "online";
 }
 
 export const PRESENCE_LABELS: Record<PresenceState, string> = {
   online: "Online",
+  away: "Online, mas em outra aba",
   background: "Com o app aberto em segundo plano",
   offline: "Offline",
 };

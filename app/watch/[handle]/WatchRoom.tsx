@@ -24,6 +24,7 @@ import {
   type ChatReplyTo,
 } from "@/lib/signalingClient";
 import { useSignaling, useHasStoredName } from "@/lib/useSignaling";
+import { peerPresence } from "@/lib/presence";
 import { useAuth } from "@/lib/AuthContext";
 import { getAccountToken } from "@/lib/accountApi";
 import { sendChatImages } from "@/lib/chatImage";
@@ -4503,7 +4504,7 @@ export function WatchRoom({ handle }: { handle: string }) {
             isAdmin={state.roomAdmins.some((a) => a.id === p.userId)}
             isApp={p.app}
             isMobileApp={p.mobileApp}
-            background={p.background}
+            presence={peerPresence(p)}
             verified={verifiedBadge(p?.flags)}
             nameColor={p.nameColor}
             micOn={p.mic}
