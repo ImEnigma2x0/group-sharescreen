@@ -1478,7 +1478,14 @@ function useBroadcastChannel(
           height: { ideal: wanted.height },
           frameRate: { ideal: wanted.frameRate },
         })
-        .catch(() => {});
+        .catch(() => {
+          // Nothing was applied, so the record above has to go back to what
+          // the capture is actually running at — otherwise the comparison
+          // matches on every later run and the retry never happens. The
+          // identity check is what keeps this from resurrecting a stale value
+          // over a share that has since stopped or moved on.
+          if (appliedConstraints.current === wanted) appliedConstraints.current = applied;
+        });
     }
 
     // The hint is a plain property of the track, so — unlike the codec

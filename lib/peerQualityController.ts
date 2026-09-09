@@ -209,19 +209,21 @@ export class PeerQualityController {
     ) {
       return;
     }
-    // Recorded before the call so that several apply()s in the same tick
-    // collapse into one setParameters, and rolled back below if it turns out
-    // nothing was applied.
-    this.appliedKbps = targetKbps;
-    this.appliedScale = scale;
-    this.appliedDegradation = this.degradation;
-
     let params: RTCRtpSendParameters;
     try {
       params = this.sender.getParameters();
     } catch {
       return;
     }
+    // Recorded here rather than earlier, and deliberately: everything above
+    // this line can still bail out without touching the sender, and a record
+    // left behind by one of those paths is a lie the guard then acts on. From
+    // here the only way out is setParameters, whose own failure rolls this
+    // back below. Written before that call, not after, so that several
+    // apply()s in the same tick collapse into one.
+    this.appliedKbps = targetKbps;
+    this.appliedScale = scale;
+    this.appliedDegradation = this.degradation;
     const encodings =
       params.encodings && params.encodings.length > 0 ? params.encodings : [{} as RTCRtpEncodingParameters];
     encodings[0].maxBitrate = targetKbps * 1000;
