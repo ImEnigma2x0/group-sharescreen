@@ -14,6 +14,7 @@ import {
 import type { PartnerClickRewardPlacement } from "@/lib/partner";
 import { useVideoDurationLabel } from "@/lib/useVideoDuration";
 import { BsCoin } from "react-icons/bs";
+import { MdContentCopy, MdOpenInNew } from "react-icons/md";
 
 const STATS_POLL_INTERVAL_MS = 3000;
 
@@ -84,6 +85,12 @@ export function PartnerAdsPanel() {
     useState<PartnerClickRewardPlacement>("both");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Which ad's report link was just copied, so the button can say so for a
+  // couple of seconds. Null also covers "the copy failed" — the link itself is
+  // always reachable through the "abrir" anchor next to it, so a browser that
+  // refuses clipboard access (an insecure origin, a denied permission) costs
+  // the admin a right-click, not the link.
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // What the preview's two buttons should show, from the form as it stands
   // right now. The duration badge is measured off the video the same way the
@@ -176,6 +183,27 @@ export function PartnerAdsPanel() {
     setClickRewardPointsInput(p.clickRewardPoints != null ? String(p.clickRewardPoints) : "");
     setClickRewardPlacement(p.clickRewardPlacement ?? "both");
     setError(null);
+  }
+
+  // The public report lives on this same site (see app/anuncio/[token]), so
+  // the link is built from wherever the panel is open — localhost while
+  // developing, the real domain in production — instead of a hardcoded host.
+  function reportUrl(token: string): string {
+    if (typeof window === "undefined") return "";
+    return `${window.location.origin}/anuncio/${encodeURIComponent(token)}`;
+  }
+
+  async function copyReportLink(p: AdminPartner) {
+    if (!p.reportToken) return;
+    try {
+      await navigator.clipboard.writeText(reportUrl(p.reportToken));
+      setCopiedId(p.id);
+      setTimeout(() => {
+        if (mountedRef.current) setCopiedId((current) => (current === p.id ? null : current));
+      }, 2000);
+    } catch {
+      // No clipboard — the anchor beside this button still opens the report.
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -357,6 +385,33 @@ export function PartnerAdsPanel() {
                   >
                     Remover
                   </button>
+                  {/* The advertiser's own link. Read-only and account-free:
+                      whoever holds it watches this one ad's numbers live and
+                      can reach nothing else (see the API's
+                      GET /partner-report/:token). */}
+                  {p.reportToken && (
+                    <span className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => copyReportLink(p)}
+                        title="Copiar o link público de estatísticas desse anúncio"
+                        className="flex items-center gap-1 font-semibold text-emerald-700 underline underline-offset-2 dark:text-emerald-400"
+                      >
+                        <MdContentCopy className="h-3 w-3" />
+                        {copiedId === p.id ? "Link copiado!" : "Copiar relatório"}
+                      </button>
+                      <a
+                        href={reportUrl(p.reportToken)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Abrir o relatório em uma nova aba"
+                        className="flex items-center gap-1 text-zinc-500 underline underline-offset-2 dark:text-zinc-400"
+                      >
+                        <MdOpenInNew className="h-3 w-3" />
+                        abrir
+                      </a>
+                    </span>
+                  )}
                 </div>
                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-zinc-500 dark:text-zinc-400">
                   <span>Expira: {p.expiresAt ? new Date(p.expiresAt).toLocaleString("pt-BR") : "nunca"}</span>

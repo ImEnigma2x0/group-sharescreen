@@ -477,6 +477,11 @@ export async function setSupporters(supporters: Supporter[]): Promise<Supporter[
 export type AdminPartner = Partner & {
   weight: number;
   createdAt: number;
+  // Key to this ad's public report page (/anuncio/[token]) — the link the
+  // admin hands an advertiser so they can watch their own numbers without an
+  // account. Optional here only for a server that predates reports; every ad
+  // gets one backfilled at startup (see the API's Partner.reportToken).
+  reportToken?: string | null;
 };
 
 export type PartnerStats = {
