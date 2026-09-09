@@ -149,13 +149,25 @@ export type PeerInfo = {
   // to ask about. Undefined from a server that predates it, read as "online" —
   // being listed here does mean being connected.
   presence?: Exclude<PresenceState, "offline">;
+  // Which kind of client this peer is on, for the indicator's shape (see the
+  // server's connectionDevice). Null/undefined for a desktop browser, which
+  // keeps the plain dot.
+  presenceDevice?: PresenceDevice | null;
 };
 
-/** The dot beside a person's name (see lib/presence.ts and the API's presence
- *  sweep): green, yellow, blue, none. "offline" is a real value on the wire —
- *  it is the answer to a question that was asked, as opposed to an id nobody
- *  has answered yet. */
+/** The colour of the indicator beside a person's name (see lib/presence.ts and
+ *  the API's presence sweep): green, blue, yellow, none. "offline" is a real
+ *  value on the wire — it is the answer to a question that was asked, as
+ *  opposed to an id nobody has answered yet. */
 export type PresenceState = "online" | "away" | "background" | "offline";
+
+/** Its shape: the GoLive app on a PC becomes a monitor, anything on a phone
+ *  becomes a phone, and an ordinary desktop browser stays a plain dot (see the
+ *  API's connectionDevice). */
+export type PresenceDevice = "app" | "mobile";
+
+/** The whole indicator: what colour, and what shape. */
+export type PresenceInfo = { state: PresenceState; device?: PresenceDevice };
 
 export type SignalingStatus = "idle" | "connecting" | "open" | "closed" | "superseded" | "banned";
 
@@ -463,7 +475,7 @@ export type SignalingState = {
   // Presence of the accounts this tab asked about, by account id (see
   // watchPresence). Only ever holds ids somebody subscribed to — this is a
   // cache of answers, not a directory of the site.
-  presence: Record<string, PresenceState>;
+  presence: Record<string, PresenceInfo>;
   presenceSeq: number;
   // The last direct message this connection was handed, and a counter beside
   // it. Same shape and same reason as `partner`/`partnerSeq`: the message is
@@ -1801,14 +1813,20 @@ class SignalingClient {
         if (!incoming || typeof incoming !== "object") break;
         const presence = { ...this.state.presence };
         for (const [id, value] of Object.entries(incoming as Record<string, unknown>)) {
+          if (!value || typeof value !== "object") continue;
+          const { state, device } = value as { state?: unknown; device?: unknown };
           if (
-            value === "online" ||
-            value === "away" ||
-            value === "background" ||
-            value === "offline"
+            state !== "online" &&
+            state !== "away" &&
+            state !== "background" &&
+            state !== "offline"
           ) {
-            presence[id] = value;
+            continue;
           }
+          presence[id] = {
+            state,
+            device: device === "app" || device === "mobile" ? device : undefined,
+          };
         }
         this.setState({ presence, presenceSeq: this.state.presenceSeq + 1 });
         break;

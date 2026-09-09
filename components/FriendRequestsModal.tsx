@@ -90,7 +90,7 @@ export function FriendRequestsModal({ open, onClose }: { open: boolean; onClose:
                 <span className="min-w-0 flex-1">
                   <span className="flex min-w-0 items-center gap-1.5">
                     <PresenceDot
-                      state={presence[user.id] ?? null}
+                      presence={presence[user.id] ?? null}
                       size={8}
                       ringClassName="ring-white dark:ring-zinc-950"
                     />

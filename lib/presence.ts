@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { signalingClient, type PeerInfo, type PresenceState } from "./signalingClient";
+import { signalingClient, type PeerInfo, type PresenceInfo, type PresenceState } from "./signalingClient";
 import { useSignaling } from "./useSignaling";
 
 // Who is around right now — the green/blue dot beside a person's face.
@@ -19,6 +19,10 @@ import { useSignaling } from "./useSignaling";
 //
 // Somebody with several devices is whichever of them is most present, in that
 // order — a phone in a pocket says nothing about the laptop in front of them.
+//
+// Each answer also carries the *device* the winning connection is on, which is
+// what turns the dot into a monitor (the GoLive app on a PC) or a phone (any
+// phone). See PresenceInfo and components/PresenceDot.
 //
 // This module is the only thing components talk to. It exists because the
 // subscription is per *connection* while the interest is per *component*: a
@@ -66,7 +70,7 @@ function release(id: string) {
  * first draws nothing because we do not know, the second draws nothing because
  * we do, and only the second is ever a claim.
  */
-export function usePresence(userId?: string | null, isGuest?: boolean): PresenceState | null {
+export function usePresence(userId?: string | null, isGuest?: boolean): PresenceInfo | null {
   const enabled = Boolean(userId) && !isGuest;
   const state = useSignaling();
 
@@ -89,7 +93,7 @@ export function usePresence(userId?: string | null, isGuest?: boolean): Presence
  * list (which is what actually knows who is on screen) and hands back the whole
  * table for rows to index into.
  */
-export function usePresenceMap(ids: (string | null | undefined)[]): Record<string, PresenceState> {
+export function usePresenceMap(ids: (string | null | undefined)[]): Record<string, PresenceInfo> {
   // Joined into a string so the effect's dependency is a value rather than a
   // fresh array on every render — a list that re-renders for an unrelated
   // reason must not re-subscribe.
@@ -117,8 +121,8 @@ export function usePresenceMap(ids: (string | null | undefined)[]): Record<strin
  * *instant*, since the room is told directly when somebody minimises the app
  * (see the API's "peer-app-state").
  */
-export function peerPresence(peer: Pick<PeerInfo, "presence">): PresenceState {
-  return peer.presence ?? "online";
+export function peerPresence(peer: Pick<PeerInfo, "presence" | "presenceDevice">): PresenceInfo {
+  return { state: peer.presence ?? "online", device: peer.presenceDevice ?? undefined };
 }
 
 export const PRESENCE_LABELS: Record<PresenceState, string> = {
@@ -127,3 +131,17 @@ export const PRESENCE_LABELS: Record<PresenceState, string> = {
   background: "Com o app aberto em segundo plano",
   offline: "Offline",
 };
+
+const DEVICE_LABELS: Record<NonNullable<PresenceInfo["device"]>, string> = {
+  app: "no app do PC",
+  mobile: "no celular",
+};
+
+/** What the indicator says, in words — the tooltip and the screen-reader name.
+ *  Both halves, because both are on screen: two indicators that differ only in
+ *  colour, or only in shape, are the same indicator to somebody who cannot see
+ *  the difference. */
+export function presenceLabel(presence: PresenceInfo): string {
+  const state = PRESENCE_LABELS[presence.state];
+  return presence.device ? `${state} · ${DEVICE_LABELS[presence.device]}` : state;
+}

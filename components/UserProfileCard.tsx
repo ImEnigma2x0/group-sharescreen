@@ -994,7 +994,7 @@ function ProfileContent({
             that box is overflow-hidden to round the picture, so a dot
             positioned inside it would be clipped away at the corner. */}
         <PresenceDot
-          state={presence}
+          presence={presence}
           size={18}
           ringClassName="ring-white dark:ring-zinc-950"
           // Parked on the avatar box's bottom-right corner, in the row's

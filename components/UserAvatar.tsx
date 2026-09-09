@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { PresenceDot } from "@/components/PresenceDot";
 import { usePresence } from "@/lib/presence";
-import type { PresenceState } from "@/lib/signalingClient";
+import type { PresenceInfo } from "@/lib/signalingClient";
 
 // One face, drawn the same way everywhere it appears.
 //
@@ -79,7 +79,7 @@ export function UserAvatar({
   /** An already-known presence, for a caller that has it without asking — a
    *  room's participant list, where being listed *is* being connected (see
    *  lib/presence.ts's peerPresence). Takes precedence over `userId`. */
-  presence?: PresenceState | null;
+  presence?: PresenceInfo | null;
   /** The surface the dot sits on, when it is not the page background. */
   presenceRingClassName?: string;
 }) {
@@ -96,7 +96,7 @@ export function UserAvatar({
   // Called unconditionally, as every hook must be — it no-ops for a guest and
   // for a caller that passed no id (see usePresence).
   const watched = usePresence(userId, isGuest);
-  const state = presence !== undefined ? presence : watched;
+  const shownPresence = presence !== undefined ? presence : watched;
 
   const style = { width: size, height: size };
   const shared = `shrink-0 rounded-full object-cover ${className}`;
@@ -105,16 +105,19 @@ export function UserAvatar({
   // online behind it stays the single element every layout here was built
   // around.
   const withDot = (face: ReactNode) =>
-    !state || state === "offline" ? (
+    !shownPresence || shownPresence.state === "offline" ? (
       face
     ) : (
       <span className="relative inline-flex shrink-0" style={style}>
         {face}
         <PresenceDot
-          state={state}
+          presence={shownPresence}
           size={Math.max(8, Math.round(size * 0.32))}
           ringClassName={presenceRingClassName}
-          className="absolute right-0 bottom-0"
+          // Anchored past the corner rather than inside it: a badge carrying a
+          // monitor or a phone is wider than the plain dot, and letting it sit
+          // half outside keeps it from covering the face it belongs to.
+          className="absolute -right-0.5 -bottom-0.5"
         />
       </span>
     );

@@ -20,7 +20,7 @@ import { VolumeSlider } from "./VolumeSlider";
 import { DisplayUserName } from "./DisplayUserName";
 import type { VerifiedTone } from "@/lib/entitlements";
 import { UserAvatar } from "./UserAvatar";
-import type { PresenceState } from "@/lib/signalingClient";
+import type { PresenceInfo } from "@/lib/signalingClient";
 import { Tooltip, Popover } from "./Tooltip";
 import { MAX_GAIN } from "@/lib/audioGain";
 
@@ -49,7 +49,7 @@ export function ParticipantRow({
   isAdmin = false,
   isApp = false,
   isMobileApp = false,
-  presence = "online",
+  presence = { state: "online" },
   renderMenu,
   onContextMenu,
 }: {
@@ -60,7 +60,7 @@ export function ParticipantRow({
   // avatar. Read from the room rather than looked up per account, which is
   // what gives a guest one too: being in this list *is* being connected, so
   // "online" is the right default for anything that does not say.
-  presence?: PresenceState;
+  presence?: PresenceInfo;
   // Account id (see server/signaling.ts's peerSummary) — only ever a real,
   // viewable profile when the peer isn't a guest. Undefined for a peer sent
   // by an older server version that doesn't include it yet, same as isGuest.

@@ -4466,6 +4466,18 @@ export function WatchRoom({ handle }: { handle: string }) {
         isAdmin={isRoomAdmin}
         isApp={mounted && isDesktopApp() && !isMobileApp()}
         isMobileApp={mounted && isMobileApp()}
+        // Your own row is you, looking at it — the only question left is which
+        // client, and this tab already knows without asking the server.
+        presence={{
+          state: "online",
+          device: mounted
+            ? isMobileApp()
+              ? "mobile"
+              : isDesktopApp()
+                ? "app"
+                : undefined
+            : undefined,
+        }}
         verified={verifiedBadge(state.account?.flags)}
         nameColor={account?.equippedNameColor}
         micOn={isMicOn}
