@@ -30,9 +30,10 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { withDeviceSuffix } from "@/lib/displayName";
 import { Popover, Tooltip } from "@/components/Tooltip";
 import { NotificationBell } from "@/components/NotificationBell";
-import { MdClose, MdOutlineImage, MdReply } from "react-icons/md";
+import { MdClose, MdOutlineImage, MdReply, MdCameraAlt, MdPhotoLibrary } from "react-icons/md";
 import { LuPanelRightClose } from "react-icons/lu";
 import { ChatImageModal, type ChatImagePreviewState } from "@/components/ChatImageModal";
+import { CameraCaptureModal } from "@/components/CameraCaptureModal";
 import {
   buildMentionsRegex,
   tokenizeMentions,
@@ -270,6 +271,11 @@ export function ChatPanel({
   const [sendingImages, setSendingImages] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [imageModalPreview, setImageModalPreview] = useState<ChatImagePreviewState | null>(null);
+  // The little "arquivos ou câmera?" menu under the image button, and the
+  // camera itself. Two states rather than one: the menu closes the moment the
+  // camera opens, so they are never both up.
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   // Only ever counts up, and only to give each attachment a stable React key
   // — two copies of the same file are two attachments.
   const attachmentSeqRef = useRef(0);
@@ -1354,36 +1360,67 @@ export function ChatPanel({
               onChange={handleFileChange}
               className="hidden"
             />
-            <Tooltip
-              content={
+            {/* A menu rather than a straight jump to the file picker: a
+                picture worth sending in a call is as often one taken right
+                now as one already on disk. */}
+            <Popover
+              open={attachMenuOpen}
+              onClose={() => setAttachMenuOpen(false)}
+              placement="top-start"
+              wrapperClassName="inline-flex shrink-0"
+              tooltip={
                 !onSendImages
                   ? (imageDisabledReason ?? "Utilize uma conta para enviar imagens")
                   : trayFull
                     ? `Máximo de ${CHAT_IMAGE_MAX_PER_MESSAGE} imagens por mensagem`
                     : "Anexar imagem (ou cole com Ctrl+V)"
               }
+              content={
+                <div className="flex w-52 flex-col p-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAttachMenuOpen(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs text-zinc-700 transition hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  >
+                    <MdPhotoLibrary className="h-4 w-4 shrink-0" aria-hidden />
+                    Escolher dos arquivos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAttachMenuOpen(false);
+                      setCameraOpen(true);
+                    }}
+                    className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs text-zinc-700 transition hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  >
+                    <MdCameraAlt className="h-4 w-4 shrink-0" aria-hidden />
+                    Tirar uma foto agora
+                  </button>
+                </div>
+              }
             >
-              <span className="inline-flex shrink-0">
-                <button
-                  type="button"
-                  onClick={
-                    !onSendImages
-                      ? onRequestAccount
-                      : canAttach
-                        ? () => fileInputRef.current?.click()
-                        : undefined
-                  }
-                  aria-label="Anexar imagem"
-                  className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-base transition ${
-                    canAttach
-                      ? "border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                      : "border-zinc-200 opacity-50 text-zinc-400 dark:border-zinc-800 dark:text-zinc-600"
-                  }`}
-                >
-                  <MdOutlineImage aria-hidden />
-                </button>
-              </span>
-            </Tooltip>
+              <button
+                type="button"
+                onClick={
+                  !onSendImages
+                    ? onRequestAccount
+                    : canAttach
+                      ? () => setAttachMenuOpen((open) => !open)
+                      : undefined
+                }
+                aria-label="Anexar imagem"
+                className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-base transition ${
+                  canAttach
+                    ? "border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    : "border-zinc-200 opacity-50 text-zinc-400 dark:border-zinc-800 dark:text-zinc-600"
+                }`}
+              >
+                <MdOutlineImage aria-hidden />
+              </button>
+            </Popover>
             <textarea
               ref={textareaRef}
               value={input}
@@ -1427,6 +1464,13 @@ export function ChatPanel({
       <ChatImageModal
         preview={imageModalPreview}
         onClose={() => setImageModalPreview(null)}
+      />
+      {/* The still lands in the same tray a picked file would, so a caption,
+          the 3-picture limit and the downscale all work out of the box. */}
+      <CameraCaptureModal
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={(file) => void attachFiles([file])}
       />
     </div>
   );
