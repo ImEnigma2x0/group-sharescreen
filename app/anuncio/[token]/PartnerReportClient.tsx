@@ -28,10 +28,19 @@ import {
   formatCount,
 } from "./charts";
 
-// How often the numbers refresh. The same interval the admin panel polls at —
-// the promise this page makes is "em tempo real", and five seconds is what
-// that means to someone watching a campaign go out.
-const POLL_INTERVAL_MS = 5000;
+// How long to wait after one refresh lands before asking for the next. Half a
+// second: the page promises "em tempo real", and this is close enough to it
+// that a click made in front of you shows up while you are still looking at
+// the number.
+//
+// It is a gap between responses, not a fixed cadence (see the effect below,
+// which schedules the next load only once the previous one settles). At this
+// interval a request that takes longer than the gap would otherwise overlap
+// the next one, and on a slow connection the page would spend its time racing
+// itself — the responses could even land out of order and make the numbers go
+// backwards. The API's rate limit for this route is set well above the ~120
+// requests a minute this produces (see GET /partner-report/:token).
+const POLL_INTERVAL_MS = 500;
 
 const dateTimeFormat = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
@@ -52,7 +61,7 @@ export function PartnerReportClient({ token }: { token: string }) {
   const [range, setRange] = useState<PartnerReportRange>("24h");
   // undefined = the first load hasn't landed yet. A failed *poll* deliberately
   // keeps the last report on screen (see the effect below): a blank page is a
-  // worse answer to a dropped packet than numbers five seconds old.
+  // worse answer to a dropped packet than numbers half a second old.
   const [report, setReport] = useState<PartnerReport | undefined>(undefined);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,12 +98,19 @@ export function PartnerReportClient({ token }: { token: string }) {
       }
     }
 
-    void load();
-    const interval = setInterval(load, POLL_INTERVAL_MS);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    async function loop() {
+      await load();
+      if (cancelled) return;
+      timer = setTimeout(loop, POLL_INTERVAL_MS);
+    }
+
+    void loop();
     return () => {
       cancelled = true;
       controller.abort();
-      clearInterval(interval);
+      if (timer) clearTimeout(timer);
     };
   }, [token, range]);
 
@@ -441,9 +457,9 @@ export function PartnerReportClient({ token }: { token: string }) {
       </section>
 
       <p className="mt-6 text-center text-[11px] leading-relaxed text-[var(--ink-3)]">
-        Os números são atualizados sozinhos a cada {POLL_INTERVAL_MS / 1000} segundos, direto do
-        servidor do GoLive. Qualquer pessoa com esse link vê essa página — ela não dá acesso a mais
-        nada da conta nem a outros anúncios.
+        Os números se atualizam sozinhos, quase em tempo real, direto do servidor do GoLive.
+        Qualquer pessoa com esse link vê essa página — ela não dá acesso a mais nada da conta nem a
+        outros anúncios.
       </p>
     </main>
   );
