@@ -114,10 +114,7 @@ export function UserAvatar({
           presence={shownPresence}
           size={Math.max(8, Math.round(size * 0.32))}
           ringClassName={presenceRingClassName}
-          // Anchored past the corner rather than inside it: a badge carrying a
-          // monitor or a phone is wider than the plain dot, and letting it sit
-          // half outside keeps it from covering the face it belongs to.
-          className="absolute -right-0.5 -bottom-0.5"
+          className="absolute right-0 bottom-0"
         />
       </span>
     );

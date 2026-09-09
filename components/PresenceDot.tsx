@@ -14,20 +14,27 @@ import type { PresenceInfo, PresenceState } from "@/lib/signalingClient";
 //   shape  — a monitor for the GoLive app on a PC, a phone for anything on a
 //            phone, a plain dot for an ordinary desktop browser.
 //
-// The glyph sits *inside* the coloured circle rather than replacing it. The
-// colour is the part read at a glance, in a list, at eleven pixels — turning it
-// into a coloured icon would trade the fast signal for the slow one. This way
-// the shape is extra for whoever looks twice.
+// The two are one mark, not a badge on a badge: with a device known, the dot
+// *becomes* the glyph, drawn in the state's colour. That keeps the indicator
+// the size of a dot instead of the size of a button, which matters because it
+// is mostly seen hanging off the corner of a 22-pixel avatar.
+//
+// The plain dot keeps its surface-coloured ring; the glyph gets none. A ring
+// exists to hold a solid circle apart from whatever is behind it, and a
+// monitor already has an outline of its own.
 //
 // Both halves are also written out in the title and the accessible name (see
 // presenceLabel): an indicator that differs from its neighbour only by hue, or
 // only by silhouette, is the same indicator to somebody who cannot tell the two
 // apart.
 
-const COLORS: Record<Exclude<PresenceState, "offline">, string> = {
-  online: "bg-emerald-500",
-  away: "bg-sky-500",
-  background: "bg-amber-400",
+// One colour per state, as a fill for the plain dot and as ink for the glyph
+// that replaces it. Two class names rather than one custom property so the
+// palette stays greppable and Tailwind can see every class it has to emit.
+const COLORS: Record<Exclude<PresenceState, "offline">, { dot: string; glyph: string }> = {
+  online: { dot: "bg-emerald-500", glyph: "text-emerald-500" },
+  away: { dot: "bg-sky-500", glyph: "text-sky-500" },
+  background: { dot: "bg-amber-400", glyph: "text-amber-400" },
 };
 
 const GLYPHS = {
@@ -38,43 +45,44 @@ const GLYPHS = {
 export function PresenceDot({
   presence,
   size = 10,
-  /** Classes for the ring that separates the indicator from whatever is behind
-   *  it — pass the surface it actually sits on when that is not the page. */
+  /** Classes for the ring that separates the dot from whatever is behind it —
+   *  pass the surface it actually sits on when that is not the page. Only the
+   *  plain dot takes a ring; a glyph is its own silhouette. */
   ringClassName = "ring-white dark:ring-zinc-950",
   className = "",
 }: {
   presence: PresenceInfo | null;
-  /** The plain dot's diameter. A badge carrying a glyph grows past this on its
-   *  own — a monitor drawn at eight pixels is a smudge, not a monitor. */
+  /** The plain dot's diameter. A glyph is drawn slightly larger, since the same
+   *  number of pixels carries a filled circle further than a monitor. */
   size?: number;
   ringClassName?: string;
   className?: string;
 }) {
   if (!presence || presence.state === "offline") return null;
   const label = presenceLabel(presence);
+  const color = COLORS[presence.state];
   const Glyph = presence.device ? GLYPHS[presence.device] : null;
-  const box = Glyph ? Math.max(14, Math.round(size * 1.4)) : size;
+
+  if (Glyph) {
+    const box = Math.max(11, Math.round(size * 1.2));
+    return (
+      <Glyph
+        role="img"
+        aria-label={label}
+        title={label}
+        style={{ width: box, height: box }}
+        className={`shrink-0 ${color.glyph} ${className}`}
+      />
+    );
+  }
 
   return (
     <span
       role="img"
       aria-label={label}
       title={label}
-      style={{ width: box, height: box }}
-      className={`inline-flex shrink-0 items-center justify-center rounded-full ring-2 ${
-        COLORS[presence.state]
-      } ${ringClassName} ${className}`}
-    >
-      {Glyph && (
-        <Glyph
-          aria-hidden
-          // White on the state colour: the glyph has to survive on three
-          // different backgrounds, and it is the one ink that does on all of
-          // them without a per-colour exception.
-          className="text-white"
-          style={{ width: Math.round(box * 0.68), height: Math.round(box * 0.68) }}
-        />
-      )}
-    </span>
+      style={{ width: size, height: size }}
+      className={`inline-block shrink-0 rounded-full ring-2 ${color.dot} ${ringClassName} ${className}`}
+    />
   );
 }
