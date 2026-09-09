@@ -7,7 +7,16 @@
 //      size their tile is rendered at (see videoQuality.tierForRenderedSize)
 //      and by the topology plan;
 //   2. the congestion ratio — how much of that tier their link can currently
-//      carry, learned from their own loss/RTT reports.
+//      carry, learned from the encoder's own report of whether it is being
+//      limited (qualityLimitationReason) corroborated by their loss and the
+//      rise in their round-trip time above that path's own floor.
+//
+// The ordering there is load-bearing. This layer sits on top of WebRTC's
+// congestion control, which is already the fast and correct reflex for real
+// congestion; everything it adds is a slow second opinion. A second opinion
+// that fires without evidence does not make the picture safer, it just makes
+// it worse — so nothing here reduces anything unless the browser first says
+// the encoder is actually being held back.
 //
 // The previous implementation conflated the two: every time the room's peer
 // count changed, the quality effect re-applied the base bitrate to *every*
@@ -21,6 +30,7 @@
 // won knowledge about a viewer's link survives an unrelated room change.
 
 import { mediaStats, type SenderSample } from "./mediaStats";
+import { congestionStep, initialCongestionState } from "./congestionControl";
 import {
   congestedBitrateKbps,
   encoderCeilingKbps,
@@ -56,32 +66,6 @@ const DEGRADATION_PREFERENCE: Record<DegradationMode, RTCDegradationPreference> 
   motion: "maintain-framerate",
 };
 
-// Congestion thresholds.
-//
-// The ratio survives room churn (see setTier's comment), which makes every
-// step down a lasting scar rather than a transient dip — so the evidence
-// required for one is deliberately high: it takes BAD_STREAK_TO_BACKOFF
-// consecutive bad samples, and no single noisy sample (one dropped ack, a
-// brief wifi retransmit, a GC pause) can cut anyone's bitrate on its own.
-//
-// The asymmetry runs the other way from what a congestion controller usually
-// wants. Backing off hard and recovering slowly is right when the cost of
-// overshooting is everyone's stream stalling; here the sender is one of many
-// and the browser's own bandwidth estimator is already the fast, correct
-// reflex for real congestion. This layer is the slow one on top, so it now
-// recovers faster than it retreats (RECOVER > 1/BACKOFF) and stops at a floor
-// that is still comfortably watchable, instead of ratcheting toward the
-// bottom on the strength of a bad minute.
-const LOSS_BAD = 0.04;
-const RTT_BAD = 0.35;
-const LOSS_GOOD = 0.01;
-const RTT_GOOD = 0.2;
-const BACKOFF = 0.9;
-const RECOVER = 1.25;
-const BAD_STREAK_TO_BACKOFF = 3;
-const HEALTHY_STREAK_TO_RECOVER = 2;
-const MIN_RATIO = 0.45;
-
 // Below this share of what the tier costs on average, extra spatial
 // downscaling buys the encoder headroom — half resolution encoded well beats
 // full resolution encoded into mush.
@@ -102,9 +86,7 @@ const SCALE_HARD = 0.35;
 const SCALE_SOFT = 0.55;
 
 export class PeerQualityController {
-  private ratio = 1;
-  private healthyStreak = 0;
-  private badStreak = 0;
+  private congestion = initialCongestionState();
   private appliedKbps = 0;
   private appliedScale = 0;
   private disposed = false;
@@ -161,29 +143,10 @@ export class PeerQualityController {
   /** Feed one telemetry sample for this peer. */
   onSample(sample: SenderSample) {
     if (this.disposed) return;
-    const { fractionLost, rtt } = sample;
-    if (fractionLost > LOSS_BAD || rtt > RTT_BAD) {
-      this.healthyStreak = 0;
-      this.badStreak += 1;
-      if (this.badStreak >= BAD_STREAK_TO_BACKOFF) {
-        this.badStreak = 0;
-        this.ratio = Math.max(MIN_RATIO, this.ratio * BACKOFF);
-        this.apply();
-      }
-    } else if (fractionLost <= LOSS_GOOD && rtt < RTT_GOOD) {
-      this.badStreak = 0;
-      this.healthyStreak += 1;
-      if (this.healthyStreak >= HEALTHY_STREAK_TO_RECOVER && this.ratio < 1) {
-        this.ratio = Math.min(1, this.ratio * RECOVER);
-        this.healthyStreak = 0;
-        this.apply();
-      }
-    } else {
-      // Neither clearly bad nor clearly good: hold, and require a fresh
-      // clean run before allowing either a backoff or a recovery.
-      this.healthyStreak = 0;
-      this.badStreak = 0;
-    }
+    const next = congestionStep(this.congestion, sample);
+    const changed = next.ratio !== this.congestion.ratio;
+    this.congestion = next;
+    if (changed) this.apply();
   }
 
   /** Pushes the current target onto the sender, if it actually changed. */
@@ -206,7 +169,7 @@ export class PeerQualityController {
     // controls.
     const tierKbps = tierSpec(this.tier).baseKbps;
     const ceilingKbps = encoderCeilingKbps(this.tier, this.bitrateCeilingKbps);
-    const targetKbps = congestedBitrateKbps(ceilingKbps, this.ratio);
+    const targetKbps = congestedBitrateKbps(ceilingKbps, this.congestion.ratio);
     const tierScale = scaleFactorFor(this.tier, this.captureHeight);
     const share = tierKbps > 0 ? targetKbps / tierKbps : 1;
     // "balanced" opts out of this extra downscale, and that opt-out is the

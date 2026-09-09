@@ -72,6 +72,27 @@ export interface RelayOfferMeta {
 const SOURCE_STALL_MS = 12_000;
 const STALL_CHECK_MS = 1000;
 
+// How long a child may take to come up before this relay gives it back to the
+// root. The relay's copy of useRoomMedia's CONNECT_TIMEOUT_MS, and kept at the
+// same value for the same reason: it has to cover ICE/TURN negotiation on a
+// slow link without being so long that a viewer stares at a placeholder.
+//
+// Its absence was a hole with no bottom. A relay's offer is an ordinary
+// signalling message and can be dropped silently (a socket mid-reconnect, the
+// server's wsSignalLimiter, a full pending-signal queue), and a pc that never
+// receives an answer never starts ICE at all — so it sits at "new" forever and
+// `connectionState` never reaches "failed". Nothing else would have noticed:
+// setChildren finds the child still in `this.children` and leaves it alone, the
+// root has already handed them over and stopped serving them directly, and the
+// viewer has closed its own recvPC and is showing "Retomando...". All three
+// parties were waiting on one of the other two, permanently.
+const CHILD_CONNECT_TIMEOUT_MS = 15_000;
+
+// Same backstop, re-armed after an ICE restart. Shorter for the same reason
+// the root's ICE_RESTART_TIMEOUT_MS is: a restart is one already-established
+// peer re-gathering candidates, not a whole room's opening burst.
+const CHILD_ICE_RESTART_TIMEOUT_MS = 6000;
+
 // Distinguishes one relay's senders from another's — and from the broadcast
 // channels' — inside the process-wide stats pump (see PeerQualityRegistry's
 // constructor). A counter rather than the origin id because a class field
@@ -86,6 +107,9 @@ type RelayChildState = {
   // connection. See openChild — it closes over the pc, and returns false when
   // a restart is unavailable or has already been spent on this failure.
   restartIce: () => boolean;
+  // Backstop for "this connection never came up at all" — see
+  // CHILD_CONNECT_TIMEOUT_MS. Null once it has fired or been disarmed.
+  connectTimer: ReturnType<typeof setTimeout> | null;
 };
 
 export class RelayLink {
@@ -150,6 +174,24 @@ export class RelayLink {
   private openChild(peerId: string, tier: QualityTier) {
     const pc = new RTCPeerConnection(iceConfigFor(this.forceRelayIce));
 
+    // See CHILD_CONNECT_TIMEOUT_MS. Called after this.children.set below, so
+    // there is always an entry to hang the timer on.
+    const armConnectTimeout = (ms: number) => {
+      const entry = this.children.get(peerId);
+      if (!entry || entry.pc !== pc) return;
+      if (entry.connectTimer) clearTimeout(entry.connectTimer);
+      entry.connectTimer = setTimeout(() => {
+        const current = this.children.get(peerId);
+        if (!current || current.pc !== pc) return;
+        current.connectTimer = null;
+        if (pc.connectionState === "connected") return;
+        // Hand them back rather than retrying here. We have already spent this
+        // handover's budget and evidently cannot reach them; the root can, and
+        // is the only party able to act while we are the reason they are dark.
+        this.giveBackToRoot(peerId);
+      }, ms);
+    };
+
     // Mirrors the root broadcaster's own recovery (see useRoomMedia's
     // restartSendIce). It matters more here, not less: a relay's children are
     // the deepest viewers in the room, a rebuild costs them a full decode gap
@@ -181,12 +223,22 @@ export class RelayLink {
             // replacing it — see useRoomMedia's offer handler.
             iceRestart: true,
           });
+          // A restart can go nowhere just as easily as a first offer can, and
+          // leaves the pc in exactly the same never-fails limbo.
+          armConnectTimeout(CHILD_ICE_RESTART_TIMEOUT_MS);
         })
-        .catch(() => this.closeChild(peerId));
+        .catch(() => {
+          // Only if this is still *our* pc. Without the check a rejection from
+          // a superseded negotiation tore down the healthy child that had
+          // already replaced it.
+          if (this.children.get(peerId)?.pc !== pc) return;
+          this.giveBackToRoot(peerId);
+        });
       return true;
     };
 
-    this.children.set(peerId, { pc, tier, restartIce });
+    this.children.set(peerId, { pc, tier, restartIce, connectTimer: null });
+    armConnectTimeout(CHILD_CONNECT_TIMEOUT_MS);
 
     for (const track of this.stream.getTracks()) {
       const sender = pc.addTrack(track, this.stream);
@@ -237,16 +289,18 @@ export class RelayLink {
     pc.onconnectionstatechange = () => {
       if (this.children.get(peerId)?.pc !== pc) return;
       if (pc.connectionState === "failed") {
-        // Try the cheap repair before giving up on them. Dropping the child
-        // outright also sends them a "stop", which clears their tile and takes
-        // away the reconnect-request they would otherwise have used to ask for
-        // a repair themselves — so this really is the only chance.
+        // Try the cheap repair before giving up on them.
         if (restartIce()) return;
-        this.closeChild(peerId);
+        this.giveBackToRoot(peerId);
       } else if (pc.connectionState === "closed") {
         this.closeChild(peerId);
       } else if (pc.connectionState === "connected") {
         iceRestartTried = false;
+        const entry = this.children.get(peerId);
+        if (entry?.connectTimer) {
+          clearTimeout(entry.connectTimer);
+          entry.connectTimer = null;
+        }
       }
     };
 
@@ -265,7 +319,33 @@ export class RelayLink {
           originId: this.originId,
         });
       })
-      .catch(() => this.closeChild(peerId));
+      .catch(() => {
+        if (this.children.get(peerId)?.pc !== pc) return;
+        this.giveBackToRoot(peerId);
+      });
+  }
+
+  /**
+   * Gives one child back to the root: we cannot serve them, and saying so is
+   * the only thing that will get them a picture again.
+   *
+   * Every path that abandons a child goes through here. Simply dropping them,
+   * which is what the failure paths used to do, left nobody serving them at
+   * all — the root goes on believing this relay has them (see relayedAway in
+   * useRoomMedia) and has no reason to ever look again — and the "stop" they
+   * were sent told them the stream had ended rather than that another was on
+   * its way, so their tile cleared instead of holding a placeholder.
+   *
+   * A no-op when the child is already gone: whoever removed it has dealt with
+   * this, and a second nack for a viewer somebody else may already be serving
+   * would only pull them back off a working connection.
+   */
+  private giveBackToRoot(peerId: string) {
+    const entry = this.children.get(peerId);
+    if (!entry) return;
+    const { tier } = entry;
+    this.closeChild(peerId, "reparent");
+    this.nack([{ id: peerId, tier }]);
   }
 
   acceptAnswer(peerId: string, sdp: RTCSessionDescriptionInit) {
@@ -303,10 +383,32 @@ export class RelayLink {
     const { tier } = existing;
     // Straight to close, without closeChild's "stop" signal: telling the child
     // to give up is the opposite of what it just asked us for.
+    if (existing.connectTimer) clearTimeout(existing.connectTimer);
     existing.pc.close();
     this.children.delete(peerId);
     this.quality.remove(peerId);
     this.openChild(peerId, tier);
+  }
+
+  /**
+   * Tells the root we cannot serve these viewers, so it takes them back.
+   *
+   * The same message the "no source" path already sends (see useRoomMedia's
+   * relay-assign handler) and handled identically there: the root drops them
+   * from relayedAway and reopens a direct connection. It also stops routing
+   * them through a relay for a while — see RELAY_OPT_OUT_MS — so a child we
+   * demonstrably cannot reach is not handed straight back to us by the next
+   * planning pass, which would otherwise flap them every six seconds.
+   */
+  private nack(children: RelayChild[]) {
+    if (children.length === 0) return;
+    signalingClient.sendSignal(this.originId, {
+      channel: "screen",
+      role: "viewer",
+      kind: "relay-nack",
+      originId: this.originId,
+      children,
+    });
   }
 
   /**
@@ -325,9 +427,20 @@ export class RelayLink {
   private closeChild(peerId: string, reason: "ended" | "reparent" | "requested" = "ended") {
     const entry = this.children.get(peerId);
     if (!entry) return;
+    if (entry.connectTimer) clearTimeout(entry.connectTimer);
     entry.pc.close();
     this.children.delete(peerId);
     this.quality.remove(peerId);
+    // A relay with no children forwards nothing, so there is nothing left to
+    // watch for stalls. Worth stopping now that "no children" is an ordinary
+    // state a link sits in rather than a moment on its way to being disposed:
+    // an idle relay would otherwise keep running a getStats() pass every
+    // second for the life of the room. ensureStallWatch restarts it the
+    // moment setChildren gives it somebody again.
+    if (this.children.size === 0 && this.stallTimer) {
+      clearInterval(this.stallTimer);
+      this.stallTimer = null;
+    }
     if (reason === "requested") return;
     signalingClient.sendSignal(peerId, {
       channel: "screen",
@@ -336,6 +449,18 @@ export class RelayLink {
       originId: this.originId,
       reparenting: reason === "reparent",
     });
+  }
+
+  /**
+   * Releases every child without tearing this link down — the root saying this
+   * relay is no longer part of the plan (an assignment naming nobody, see
+   * useRoomMedia's applyRelayPlan).
+   *
+   * Told as a reparent because that is what it is: the root opens a direct
+   * connection to each of these same people in the very same pass.
+   */
+  releaseAllChildren() {
+    for (const peerId of [...this.children.keys()]) this.closeChild(peerId, "reparent");
   }
 
   /** The child asked us to stop sending. Frees the re-encode immediately. */
@@ -388,6 +513,11 @@ export class RelayLink {
     } catch {
       return;
     }
+    // The last child may have been released while getStats was in flight, and
+    // the check at the top of this method has already been passed. Declaring a
+    // source lost on behalf of nobody would report this relay unusable and
+    // dispose it for no reason.
+    if (this.children.size === 0) return;
     const now = Date.now();
     if (bytes > this.lastBytes) {
       this.lastBytes = bytes;
@@ -403,12 +533,23 @@ export class RelayLink {
     }
   }
 
-  dispose() {
+  /**
+   * Shuts this relay down and tells every child why.
+   *
+   * `reason` is passed straight through to closeChild, and the caller is the
+   * only party that knows which one is true. "ended" — the default and the
+   * right answer for a source that genuinely died or a room being left — is
+   * wrong for the one case that used to share it: our own source being
+   * *reparented*. There the stream has not ended at all, we are simply about
+   * to receive it from somebody else, and telling a whole subtree it ended
+   * made every reparenting of a mid-tree relay blank every tile beneath it.
+   */
+  dispose(reason: "ended" | "reparent" = "ended") {
     if (this.stallTimer) {
       clearInterval(this.stallTimer);
       this.stallTimer = null;
     }
-    for (const peerId of [...this.children.keys()]) this.closeChild(peerId);
+    for (const peerId of [...this.children.keys()]) this.closeChild(peerId, reason);
     this.quality.clear();
   }
 }
@@ -449,8 +590,9 @@ export class RelayManager {
     return link;
   }
 
-  release(originId: string) {
-    this.links.get(originId)?.dispose();
+  /** See RelayLink.dispose for what `reason` decides. */
+  release(originId: string, reason: "ended" | "reparent" = "ended") {
+    this.links.get(originId)?.dispose(reason);
     this.links.delete(originId);
   }
 

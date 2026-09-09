@@ -92,6 +92,32 @@ for (let i = 1; i < TIERS.length; i += 1) {
   );
 }
 
+// That ordering is by *cost*, and cost alone — 1440p30 sits below 1080p60 on
+// purpose. So walking the ladder down can walk resolution *up*, and anywhere
+// a step down is applied to a tier somebody actually asked for, the result
+// has to be clamped back under it (see planTopology's depth penalty). Without
+// the clamp, one depth penalty turned a 1080p60 viewer into "1440p30" — a
+// 2560-wide tier nobody can produce or receive — and the planner then charged
+// their relay 4500 kbps and 111 Mpx/s for a stream really costing 3000 and 62.
+for (const start of TIERS) {
+  let prevKbps = Infinity;
+  let prevMpxs = Infinity;
+  for (let steps = 0; steps < TIERS.length; steps += 1) {
+    const stepped = capTier(stepDown(start.tier, steps), start.tier);
+    const spec = tierSpec(stepped);
+    assert.ok(
+      spec.width <= start.width && spec.frameRate <= start.frameRate,
+      `descer ${steps} de ${start.tier} não pode ultrapassar o próprio teto (deu ${stepped})`
+    );
+    assert.ok(
+      spec.baseKbps <= prevKbps && encodeMpxs(stepped) <= prevMpxs,
+      `descer de ${start.tier} tem que ficar monotonicamente mais barato (${stepped} no passo ${steps})`
+    );
+    prevKbps = spec.baseKbps;
+    prevMpxs = encodeMpxs(stepped);
+  }
+}
+
 // --- ceilings -------------------------------------------------------------
 
 // The broadcaster's three dials are independent, and capTier is where that is
@@ -197,6 +223,17 @@ const cascaded = planTopology(desktop, allFullscreen, 1.0);
 assert.ok(cascaded.depth > 1, "deveria escalar para cascata");
 assert.ok(cascaded.relays.length > 0);
 assert.deepEqual(cascaded.unserved, [], "ninguém pode ficar sem stream");
+
+// And nobody deeper in that tree is planned above what they asked for. Every
+// viewer here wants 1080p60, so no edge may carry a wider or faster tier —
+// the depth penalty is only ever allowed to take quality away.
+for (const edge of cascaded.edges) {
+  const spec = tierSpec(edge.tier);
+  assert.ok(
+    spec.width <= 1920 && spec.frameRate <= 60,
+    `aresta em profundidade ${edge.depth} recebeu ${edge.tier}, acima do que o viewer pediu`
+  );
+}
 
 // The bug that the first draft of this planner had: a host too weak to encode
 // the requested tier for ANYONE gave up and served nobody. The correct

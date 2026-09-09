@@ -40,7 +40,19 @@ export interface SenderSample {
 export interface CapacitySample {
   /** Bandwidth estimate from ICE, in kbps. 0 when not yet known. */
   availableOutgoingKbps: number;
-  /** Sum of what we are currently sending across all peers, kbps. */
+  /**
+   * Sum of what we are currently sending across all peers, kbps.
+   *
+   * Across *all* of them, which is the whole point and was not what this
+   * used to report: the round-robin window below visits at most
+   * MAX_SENDERS_PER_PASS senders per tick, and this was summed inside that
+   * loop. In an 80-person room it therefore reported about a seventh of the
+   * truth — and it is read (see useMeshTopology's estimatedUplinkKbps) as
+   * the *proof* of what this uplink demonstrably carries, which is the one
+   * thing that breaks the circularity of "we send little, so the estimator
+   * reads little, so we are told we may only send little". The guard was
+   * disabled in exactly the rooms that need it.
+   */
   usedOutgoingKbps: number;
   /** Fraction of active senders currently reporting a CPU limitation (0..1). */
   cpuPressure: number;
@@ -54,6 +66,12 @@ type SenderEntry = {
   sender: RTCRtpSender;
   tier: QualityTier;
   prev?: { bytes: number; frames: number; at: number };
+  // What this sender was last measured producing, kbps. Held across passes
+  // so the room total can be summed over every sender rather than only the
+  // ones this tick happened to visit — see CapacitySample.usedOutgoingKbps.
+  // A stale reading from ten seconds ago is a far better estimate of a
+  // steady stream than counting it as zero.
+  lastKbps: number;
 };
 
 const POLL_INTERVAL_MS = 2000;
@@ -84,7 +102,7 @@ class MediaStatsPump {
   private smoothedMultiplier = 1;
 
   register(peerId: string, pc: RTCPeerConnection, sender: RTCRtpSender, tier: QualityTier) {
-    this.senders.set(peerId, { pc, sender, tier });
+    this.senders.set(peerId, { pc, sender, tier, lastKbps: 0 });
     this.ensureRunning();
   }
 
@@ -145,7 +163,6 @@ class MediaStatsPump {
       this.cursor = (this.cursor + MAX_SENDERS_PER_PASS) % entries.length;
     }
 
-    let totalKbps = 0;
     let cpuLimited = 0;
     let counted = 0;
     let bestAvailable = 0;
@@ -156,7 +173,12 @@ class MediaStatsPump {
     // main thread, and firing a dozen getStats() calls simultaneously
     // produces a latency spike on the very thread that is encoding video.
     for (const [peerId, entry] of window) {
-      if (entry.pc.connectionState !== "connected") continue;
+      if (entry.pc.connectionState !== "connected") {
+        // Nothing is going out over a connection in this state, and its last
+        // reading must not go on counting towards the room total below.
+        entry.lastKbps = 0;
+        continue;
+      }
       let report: RTCStatsReport;
       try {
         // Scoped to this sender's track: a full pc.getStats() also walks
@@ -195,15 +217,27 @@ class MediaStatsPump {
 
       const now = performance.now();
       let outgoingKbps = 0;
+      // False only on the very first visit to a sender, where there is no
+      // previous byte count to difference against and zero means "not known
+      // yet" rather than "not sending".
+      let measured = false;
       if (entry.prev && now > entry.prev.at) {
         const dt = (now - entry.prev.at) / 1000;
         outgoingKbps = ((bytes - entry.prev.bytes) * 8) / 1000 / dt;
         if (fps === 0) fps = (frames - entry.prev.frames) / dt;
+        measured = true;
       }
       entry.prev = { bytes, frames, at: now };
 
+      // Zero included. A screen share of something still genuinely emits
+      // almost nothing, and carrying the last busy reading forward would keep
+      // claiming an uplink is demonstrably carrying traffic it stopped
+      // carrying minutes ago. Where the content is quiet the estimate
+      // correctly falls back to the bandwidth estimator, which keeps itself
+      // alive over an idle link by probing.
+      if (measured) entry.lastKbps = outgoingKbps;
+
       if (outgoingKbps > 0) {
-        totalKbps += outgoingKbps;
         multiplierAccum += measureContentMultiplier(outgoingKbps, entry.tier);
         multiplierCount += 1;
       }
@@ -230,6 +264,13 @@ class MediaStatsPump {
     }
 
     if (counted === 0) return;
+
+    // Over every sender, not just the ones this tick visited — see
+    // CapacitySample.usedOutgoingKbps. Each contributes its most recent
+    // reading, which for a steady stream is accurate however long ago the
+    // round-robin last reached it, and zero for anything not connected.
+    let totalKbps = 0;
+    for (const entry of this.senders.values()) totalKbps += entry.lastKbps;
 
     // Exponential smoothing. availableOutgoingBitrate in particular ramps as
     // the bandwidth estimator probes, so an unsmoothed reading taken shortly
