@@ -26,6 +26,7 @@ const ZIP64_EOCD_SIGNATURE = 0x06064b50;
 // Any 32-bit field holding this means "the real value is in the ZIP64 extra
 // field", which is how a zip larger than 4GB (or with more than 65535 entries)
 // stores its numbers.
+
 const ZIP64_MARKER_32 = 0xffffffff;
 const ZIP64_MARKER_16 = 0xffff;
 const ZIP64_EXTRA_HEADER_ID = 0x0001;
