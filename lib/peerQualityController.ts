@@ -89,6 +89,10 @@ export class PeerQualityController {
   private congestion = initialCongestionState();
   private appliedKbps = 0;
   private appliedScale = 0;
+  // The mode those two numbers were pushed with. Null means nothing is known
+  // to have reached the sender — the initial state, and what a rejected
+  // setParameters restores.
+  private appliedDegradation: DegradationMode | null = null;
   private disposed = false;
 
   constructor(
@@ -188,14 +192,29 @@ export class PeerQualityController {
     // values that did not change costs a keyframe and a visible hitch for
     // no benefit. In a 30-peer room this guard removes the large majority
     // of calls, since most peers are steady most of the time.
+    //
+    // The mode has to be part of the comparison, and leaving it out was a
+    // real bug rather than an omission: switching profile mid-share moves
+    // neither the bitrate nor the scale in the ordinary case, so
+    // setDegradation() reached this guard, matched on both numbers, and
+    // returned before the degradationPreference below could be written. The
+    // picker said "Vídeo / jogo" while the sender was still on
+    // maintain-resolution — protect sharpness, throw frames away — which is
+    // exactly the slideshow the switch was made to escape, and only
+    // restarting the whole share cleared it.
     if (
+      this.appliedDegradation === this.degradation &&
       Math.abs(targetKbps - this.appliedKbps) < Math.max(50, this.appliedKbps * 0.05) &&
       scale === this.appliedScale
     ) {
       return;
     }
+    // Recorded before the call so that several apply()s in the same tick
+    // collapse into one setParameters, and rolled back below if it turns out
+    // nothing was applied.
     this.appliedKbps = targetKbps;
     this.appliedScale = scale;
+    this.appliedDegradation = this.degradation;
 
     let params: RTCRtpSendParameters;
     try {
@@ -215,7 +234,16 @@ export class PeerQualityController {
     params.degradationPreference = DEGRADATION_PREFERENCE[this.degradation];
     this.sender.setParameters(params).catch(() => {
       // Racing a renegotiation or a closing pc — the next apply() will
-      // reconcile, so a failure here is not worth surfacing.
+      // reconcile, so a failure here is not worth surfacing. It does have to
+      // be *undone*, though: the optimistic record above says the sender is
+      // carrying values it never took, and left standing it makes the guard
+      // swallow every retry. The sender then keeps the old bitrate, scale
+      // and degradation until something happens to move the target far
+      // enough to fall through on its own — which for a profile switch,
+      // whose target usually does not move at all, is never.
+      this.appliedKbps = 0;
+      this.appliedScale = 0;
+      this.appliedDegradation = null;
     });
   }
 
