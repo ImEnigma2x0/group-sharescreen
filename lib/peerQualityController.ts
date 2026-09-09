@@ -66,6 +66,36 @@ const DEGRADATION_PREFERENCE: Record<DegradationMode, RTCDegradationPreference> 
   motion: "maintain-framerate",
 };
 
+// The other half of what a profile means to the encoder, and the reason it
+// lives next to DEGRADATION_PREFERENCE instead of at either call site: the
+// origin sets it on its capture (see useRoomMedia's contentHintFor) and a
+// relay sets it on the track it re-encodes (see RelayLink), and the two
+// drifting apart means a relayed viewer is served under a profile nobody
+// picked.
+//
+// Both quality profiles bias toward spatial detail; what separates them is
+// degradationPreference, not this. "detail" rather than "motion" for balanced
+// is what makes it keep the picture it advertises instead of spending the
+// bits on frames.
+const CONTENT_HINT: Record<DegradationMode, "text" | "detail" | "motion"> = {
+  text: "text",
+  balanced: "detail",
+  motion: "motion",
+};
+
+export function contentHintForDegradation(mode: DegradationMode) {
+  return CONTENT_HINT[mode];
+}
+
+// How long to wait before re-pushing parameters the sender refused, and how
+// many times. Short, because the refusal this exists for — parameters made
+// stale by a getParameters that raced ours — is gone by the next tick; and
+// bounded, because a sender that refuses for a reason that is not going away
+// is one whose connection is closing, and its controller is disposed moments
+// later anyway.
+const APPLY_RETRY_MS = 500;
+const APPLY_RETRIES = 3;
+
 // Below this share of what the tier costs on average, extra spatial
 // downscaling buys the encoder headroom — half resolution encoded well beats
 // full resolution encoded into mush.
@@ -93,6 +123,12 @@ export class PeerQualityController {
   // to have reached the sender — the initial state, and what a rejected
   // setParameters restores.
   private appliedDegradation: DegradationMode | null = null;
+  // Which apply() a given setParameters belongs to. Without it a call that
+  // rejects late rolls back the record of a *later* one that succeeded, and
+  // the controller then re-pushes parameters the sender is already carrying.
+  private applySeq = 0;
+  private retriesLeft = APPLY_RETRIES;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
 
   constructor(
@@ -209,6 +245,7 @@ export class PeerQualityController {
     ) {
       return;
     }
+
     let params: RTCRtpSendParameters;
     try {
       params = this.sender.getParameters();
@@ -224,6 +261,7 @@ export class PeerQualityController {
     this.appliedKbps = targetKbps;
     this.appliedScale = scale;
     this.appliedDegradation = this.degradation;
+    const seq = (this.applySeq += 1);
     const encodings =
       params.encodings && params.encodings.length > 0 ? params.encodings : [{} as RTCRtpEncodingParameters];
     encodings[0].maxBitrate = targetKbps * 1000;
@@ -234,23 +272,43 @@ export class PeerQualityController {
     // under maintain-resolution degrades into a slideshow rather than
     // softening.
     params.degradationPreference = DEGRADATION_PREFERENCE[this.degradation];
-    this.sender.setParameters(params).catch(() => {
-      // Racing a renegotiation or a closing pc — the next apply() will
-      // reconcile, so a failure here is not worth surfacing. It does have to
-      // be *undone*, though: the optimistic record above says the sender is
-      // carrying values it never took, and left standing it makes the guard
-      // swallow every retry. The sender then keeps the old bitrate, scale
-      // and degradation until something happens to move the target far
-      // enough to fall through on its own — which for a profile switch,
-      // whose target usually does not move at all, is never.
-      this.appliedKbps = 0;
-      this.appliedScale = 0;
-      this.appliedDegradation = null;
-    });
+    this.sender.setParameters(params).then(
+      () => {
+        if (seq !== this.applySeq) return;
+        this.retriesLeft = APPLY_RETRIES;
+      },
+      () => {
+        // Superseded: a later apply() is the one whose result counts, and
+        // rolling back here would erase what it wrote.
+        if (this.disposed || seq !== this.applySeq) return;
+        // Racing a renegotiation or a closing pc. Not worth surfacing, but it
+        // does have to be undone: the record above says the sender is
+        // carrying values it never took, and left standing it makes the guard
+        // swallow everything that follows.
+        this.appliedKbps = 0;
+        this.appliedScale = 0;
+        this.appliedDegradation = null;
+        // And undoing it is not enough on its own, which is the part that
+        // bites. apply() runs when something moves — a tier, a dial, a
+        // congestion ratio — and a profile switch on a settled link moves
+        // none of them. So there is no "next apply() will reconcile" to rely
+        // on: without a retry of our own the sender keeps the old mode for as
+        // long as that link stays quiet, which from the person's side is
+        // exactly the bug this whole change exists to fix, just rarer.
+        if (this.retriesLeft <= 0 || this.retryTimer) return;
+        this.retriesLeft -= 1;
+        this.retryTimer = setTimeout(() => {
+          this.retryTimer = null;
+          this.apply();
+        }, APPLY_RETRY_MS);
+      }
+    );
   }
 
   dispose() {
     this.disposed = true;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
   }
 }
 

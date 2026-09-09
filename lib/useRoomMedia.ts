@@ -47,7 +47,11 @@ import {
   type LocalMediaSlot,
   type LocalMediaAction,
 } from "./localMediaSource";
-import { PeerQualityRegistry, type DegradationMode } from "./peerQualityController";
+import {
+  PeerQualityRegistry,
+  contentHintForDegradation,
+  type DegradationMode,
+} from "./peerQualityController";
 import { qualityNegotiator, type QualityChannel } from "./qualityNegotiation";
 import { useMeshCapacity, useMeshTopology, type PeerCapacity } from "./useMeshTopology";
 import { RelayManager, RELAY_ENABLED, type RelayChild } from "./relayLink";
@@ -490,19 +494,13 @@ function contentHintFor(
   // set to — same reasoning — and so is everything else that is not a real
   // screen share.
   if (channel !== "screen" || source === "camera") return "motion";
-  // On a real screen share the profile chooses the hint, and both quality
-  // profiles bias the encoder toward spatial detail — the difference between
-  // them lives in degradationPreference (text holds resolution absolutely;
-  // balanced sheds a little of each), not here. Balanced used to share
-  // "motion" with the game/video profile, which is exactly what made it look
-  // soft: "motion" tells the encoder to spend its bits on frames and let
-  // sharpness go. "detail" is what makes balanced actually keep the picture
-  // it advertises. The VP9-vs-"detail" caveat above does not reach it —
-  // balanced encodes with H264 (see videoCodecPreferences), where "detail"
-  // behaves.
-  if (mode === "text") return "text";
-  if (mode === "balanced") return "detail";
-  return "motion";
+  // On a real screen share the profile chooses the hint. The table lives in
+  // peerQualityController next to DEGRADATION_PREFERENCE, because a relay
+  // needs exactly the same answer for the track it re-encodes and two copies
+  // of it would drift. The VP9-vs-"detail" caveat above does not reach
+  // balanced — it encodes with H264 (see videoCodecPreferences), where
+  // "detail" behaves.
+  return contentHintForDegradation(mode);
 }
 
 function useBroadcastChannel(
@@ -1422,25 +1420,42 @@ function useBroadcastChannel(
   );
 
   // Tells every relay currently serving for us what content this is, without
-  // touching who they serve. A relay-assign is a relay's only source for that
+  // changing who they serve. A relay-assign is a relay's only source for that
   // (see RelayLink.setChildren), and it is only ever sent by a planning pass
   // — so switching profile mid-share left every viewer behind a relay on
   // whatever profile happened to be current when the topology was last
-  // computed, which in a settled room is indefinitely. Idempotent, exactly
-  // like the plan it re-sends.
+  // computed, which in a settled room is indefinitely.
+  //
+  // The last plan is a cache, and the topology also moves *outside* a
+  // planning pass: a relay-nack takes children back immediately and opts them
+  // out of being relayed again for a while. Re-sending the cache verbatim
+  // would hand a relay back the very child it just said it could not serve,
+  // which is the flap relayOptOut exists to prevent — so every child is
+  // re-checked against the live routing on the way out, and the cache is
+  // narrowed to what survived. That is also why a relay left with nothing is
+  // skipped rather than sent an empty list: an empty list is a complete
+  // instruction to release everybody (see applyRelayPlan), and this function
+  // is not entitled to make that decision.
   const resendRelayProfile = useCallback(() => {
     if (!RELAY_ENABLED) return;
+    const stillServing = new Map<string, RelayChild[]>();
     for (const [relayId, children] of servingRelayChildren.current) {
+      const live = children.filter(
+        (child) => relayedAway.current.has(child.id) && !isRelayOptedOut(child.id)
+      );
+      if (live.length === 0) continue;
+      stillServing.set(relayId, live);
       signalingClient.sendSignal(relayId, {
         channel,
         role: "broadcaster",
         kind: "relay-assign",
         originId: signalingClient.state.selfId ?? undefined,
-        children,
+        children: live,
         degradation: degradationModeRef.current,
       });
     }
-  }, [channel]);
+    servingRelayChildren.current = stillServing;
+  }, [channel, isRelayOptedOut]);
 
   // Lets the broadcaster change resolution/fps/bitrate mid-share to react to
   // a room bogging down, instead of having to stop and restart the whole
@@ -1479,12 +1494,18 @@ function useBroadcastChannel(
           frameRate: { ideal: wanted.frameRate },
         })
         .catch(() => {
-          // Nothing was applied, so the record above has to go back to what
-          // the capture is actually running at — otherwise the comparison
-          // matches on every later run and the retry never happens. The
-          // identity check is what keeps this from resurrecting a stale value
-          // over a share that has since stopped or moved on.
-          if (appliedConstraints.current === wanted) appliedConstraints.current = applied;
+          // Nothing was applied, so the record above cannot stand: left as
+          // it is, the comparison matches on every later run and the retry
+          // never happens. Cleared rather than restored to the previous
+          // value, because after two quick changes that previous value may
+          // be another failed attempt rather than what the capture is
+          // actually running at — and null, meaning "unknown", is the one
+          // answer that is never wrong here: it costs one redundant
+          // applyConstraints on the next change and buys back the guarantee
+          // that a failure is always retried. The identity check is what
+          // keeps a late failure from clearing a later attempt's record, or
+          // writing anything at all over a share that has since stopped.
+          if (appliedConstraints.current === wanted) appliedConstraints.current = null;
         });
     }
 
