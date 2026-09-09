@@ -1,10 +1,39 @@
-const WS_URL = process.env.NEXT_PUBLIC_SIGNALING_URL || "ws://localhost:4000/ws";
+/**
+ * Dynamically resolves the WebSocket signaling URL.
+ * In development, if NEXT_PUBLIC_SIGNALING_URL points to localhost/127.0.0.1,
+ * but the app is accessed via a remote or LAN IP (e.g. 100.101.38.69),
+ * this automatically adapts the host to match the page's host.
+ */
+export function getSignalingWsUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_SIGNALING_URL || "ws://localhost:4000/ws";
+  if (typeof window === "undefined") {
+    return configured;
+  }
+  try {
+    const parsed = new URL(configured);
+    if (
+      (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") &&
+      window.location.hostname &&
+      window.location.hostname !== "localhost" &&
+      window.location.hostname !== "127.0.0.1"
+    ) {
+      parsed.hostname = window.location.hostname;
+      if (window.location.protocol === "https:" && parsed.protocol === "ws:") {
+        parsed.protocol = "wss:";
+      }
+      return parsed.toString();
+    }
+  } catch {
+    // Ignore URL parse error and fall back to configured
+  }
+  return configured;
+}
 
 // The signaling server also serves plain HTTP endpoints (health, room
 // directory) on the same host — derive that base from the WS URL instead of
 // needing a second env var for what's really the same server.
 export function getSignalingHttpBase(): string {
-  return WS_URL.replace(/^ws/, "http").replace(/\/ws\/?$/, "");
+  return getSignalingWsUrl().replace(/^ws/, "http").replace(/\/ws\/?$/, "");
 }
 
 export const PRIVATE_ROOM_PREFIX = "priv-";

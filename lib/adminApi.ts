@@ -279,11 +279,43 @@ export type AdminStats = {
   bannedAccounts?: number;
   bannedFingerprints?: number;
   bannedWords: number;
+  streamersOnline?: number;
+  externalStreams?: number;
   mongo: { enabled: boolean; connected: boolean };
 };
 
 export async function fetchAdminStats(): Promise<AdminStats> {
   return adminFetch<AdminStats>("/admin/stats");
+}
+
+export type StreamExternalEntry = {
+  id: string;
+  room: string;
+  target: string;
+  targetKind: "screen" | "camera" | "file" | "video-source" | "other";
+  targetId: string;
+  authorId?: string;
+  authorName?: string;
+  connectedAt: number;
+  connectedSeconds: number;
+};
+
+export type StreamStats = {
+  streamersOnline: number;
+  roomsWithStreamerMode: number;
+  externalStreamClients: number;
+  activeExternalStreams: number;
+  byKind: {
+    screens: number;
+    cameras: number;
+    files: number;
+    videoSources: number;
+  };
+  streams: StreamExternalEntry[];
+};
+
+export async function fetchStreamStats(): Promise<StreamStats> {
+  return adminFetch<StreamStats>("/admin/stream-stats");
 }
 
 // What a ban is keyed on (see the server's moderationStore.ts). An IP is the

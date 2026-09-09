@@ -60,6 +60,8 @@ export function StatsOverview() {
       <StatCard label="Pessoas online" value={stats.peopleOnline} />
       <StatCard label="Compartilhando tela" value={stats.sharingCount} />
       <StatCard label="Conexões abertas" value={stats.connectedSockets} />
+      <StatCard label="Streamers online" value={stats.streamersOnline ?? 0} />
+      <StatCard label="Transmissões externas" value={stats.externalStreams ?? 0} />
       <StatCard label="Salas públicas" value={stats.publicRooms} />
       <StatCard label="Salas privadas" value={stats.privateRooms} />
       <StatCard label="IPs banidos" value={stats.bannedIps} />

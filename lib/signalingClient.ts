@@ -21,6 +21,7 @@ import { getDeviceId } from "./deviceId";
 import { isUserMentionedInMessage, containsBroadcastMention } from "./chatMentions";
 import { showNotification } from "./notifications";
 import { isObsClient } from "./browserEnv";
+import { getSignalingWsUrl } from "./roomsApi";
 
 // `role: "moderator"` marks a moderator silently watching for moderation
 // (see server/signaling.ts's "admin-join") — present in the peer list so
@@ -173,18 +174,14 @@ export const DEFAULT_ROOM_PERMISSIONS: RoomPermissions = {
 };
 
 /**
- * Returns true if a peer is an OBS Browser Source connection (role === "obs" or name starts with OBS).
+ * Returns true if a peer is an OBS Browser Source connection (role === "obs").
  * OBS peers must never appear as room participants, headcount, chat mentions, etc.
  */
 export function isObsPeer(
   p: { role?: string; name?: string; obsTarget?: string } | null | undefined
 ): boolean {
   if (!p) return false;
-  if (p.role === "obs") return true;
-  if (p.obsTarget) return true;
-  if (!p.name) return false;
-  const trimmed = p.name.trim();
-  return /^(?:OBS|Stream|Viewer|Fonte|Captura)(?:[:-]|\s|$)/i.test(trimmed);
+  return p.role === "obs";
 }
 
 // Someone the owner promoted to help run the room. `id` is a stable
@@ -624,7 +621,6 @@ export type SignalingState = {
 type Listener = () => void;
 type SignalListener = (from: string, data: Record<string, unknown>) => void;
 
-const WS_URL = process.env.NEXT_PUBLIC_SIGNALING_URL || "ws://localhost:4000/ws";
 const NAME_STORAGE_KEY = "sharescreen:name";
 // Deliberately sessionStorage, not localStorage: this id is echoed to every
 // peer in whatever room it's used in (see peerSummary/room-state on the
@@ -1035,7 +1031,7 @@ class SignalingClient {
       return;
     }
     this.setState({ status: "connecting" });
-    const ws = new WebSocket(WS_URL);
+    const ws = new WebSocket(getSignalingWsUrl());
     this.ws = ws;
 
     ws.onopen = () => {

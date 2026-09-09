@@ -41,10 +41,12 @@ export function isStandaloneDisplay(): boolean {
 }
 
 let obsDetected = false;
+let broadcastSoftwareDetected = false;
 
 if (typeof window !== "undefined") {
   window.addEventListener("obsStudioInit", () => {
     obsDetected = true;
+    broadcastSoftwareDetected = true;
     try {
       document.documentElement.setAttribute("data-obs", "true");
     } catch {}
@@ -53,7 +55,7 @@ if (typeof window !== "undefined") {
 
 /**
  * Checks if the current environment is OBS Studio, Streamlabs, or similar
- * broadcasting software (e.g. Browser Source), or accessing via the OBS route.
+ * broadcasting software (e.g. Browser Source), or accessing via the stream/obs route.
  */
 export function isObsClient(): boolean {
   if (obsDetected) return true;
@@ -82,9 +84,12 @@ export function isObsClient(): boolean {
     return true;
   }
 
-  // 3. Check if accessing the dedicated /obs route or test parameters
+  // 3. Check if accessing the dedicated /stream or /obs route or test parameters
   if (typeof window.location !== "undefined") {
-    if (window.location.pathname?.startsWith("/obs")) {
+    if (
+      window.location.pathname?.startsWith("/stream") ||
+      window.location.pathname?.startsWith("/obs")
+    ) {
       obsDetected = true;
       try {
         document.documentElement.setAttribute("data-obs", "true");
@@ -97,7 +102,9 @@ export function isObsClient(): boolean {
         searchParams.get("preview") === "true" ||
         searchParams.get("isObs") === "true" ||
         searchParams.get("obs") === "true" ||
-        searchParams.get("obs") === "1"
+        searchParams.get("obs") === "1" ||
+        searchParams.get("stream") === "true" ||
+        searchParams.get("stream") === "1"
       ) {
         obsDetected = true;
         try {
@@ -116,9 +123,10 @@ export function isObsClient(): boolean {
 /**
  * Checks if the current environment is an actual broadcasting software like
  * OBS Studio, Streamlabs, vMix, etc. (via window APIs or User-Agent).
- * Returns false for normal web browsers (Chrome, Firefox, Safari, Edge) even on /obs routes.
+ * Returns false for normal web browsers (Chrome, Firefox, Safari, Edge) even on /stream or /obs routes.
  */
 export function isBroadcastSoftware(): boolean {
+  if (broadcastSoftwareDetected) return true;
   if (typeof window === "undefined") return false;
 
   const win = window as unknown as {

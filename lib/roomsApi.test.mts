@@ -18,6 +18,8 @@ import {
   MAX_PRIVATE_ROOM_NAME_LENGTH,
   roomHandleFromInput,
   HANDLE_RE,
+  getSignalingWsUrl,
+  getSignalingHttpBase,
 } from "./roomsApi";
 
 // Round trip: whatever we build, we can read back.
@@ -121,3 +123,64 @@ assert.equal(
 assert.equal(roomHandleFromInput("https://g.nemtudo.me/%E0%A4%A"), "https://g.nemtudo.me/%E0%A4%A");
 
 console.log("roomHandleFromInput: ok");
+
+// ─── getSignalingWsUrl & getSignalingHttpBase ─────────────────────────────
+// Default SSR / node environment (no window object)
+assert.equal(
+  getSignalingWsUrl(),
+  process.env.NEXT_PUBLIC_SIGNALING_URL || "ws://localhost:4000/ws"
+);
+assert.equal(
+  getSignalingHttpBase(),
+  (process.env.NEXT_PUBLIC_SIGNALING_URL || "ws://localhost:4000/ws")
+    .replace(/^ws/, "http")
+    .replace(/\/ws\/?$/, "")
+);
+
+// In browser on localhost: stays as localhost
+(globalThis as unknown as { window?: unknown }).window = {
+  location: {
+    hostname: "localhost",
+    protocol: "http:",
+  },
+};
+assert.equal(getSignalingWsUrl(), "ws://localhost:4000/ws");
+assert.equal(getSignalingHttpBase(), "http://localhost:4000");
+
+// In browser on specific IP 100.101.38.69: dynamically rewrites to that IP
+(globalThis as unknown as { window?: unknown }).window = {
+  location: {
+    hostname: "100.101.38.69",
+    protocol: "http:",
+  },
+};
+assert.equal(getSignalingWsUrl(), "ws://100.101.38.69:4000/ws");
+assert.equal(getSignalingHttpBase(), "http://100.101.38.69:4000");
+
+// In browser with HTTPS on IP: upgrades ws to wss
+(globalThis as unknown as { window?: unknown }).window = {
+  location: {
+    hostname: "100.101.38.69",
+    protocol: "https:",
+  },
+};
+assert.equal(getSignalingWsUrl(), "wss://100.101.38.69:4000/ws");
+assert.equal(getSignalingHttpBase(), "https://100.101.38.69:4000");
+
+// Production URL should NOT be rewritten to local IP
+const oldEnv = process.env.NEXT_PUBLIC_SIGNALING_URL;
+try {
+  process.env.NEXT_PUBLIC_SIGNALING_URL = "wss://apigolive.nemtudo.me/ws";
+  assert.equal(getSignalingWsUrl(), "wss://apigolive.nemtudo.me/ws");
+  assert.equal(getSignalingHttpBase(), "https://apigolive.nemtudo.me");
+} finally {
+  if (oldEnv === undefined) {
+    delete process.env.NEXT_PUBLIC_SIGNALING_URL;
+  } else {
+    process.env.NEXT_PUBLIC_SIGNALING_URL = oldEnv;
+  }
+  delete (globalThis as unknown as { window?: unknown }).window;
+}
+
+console.log("getSignalingWsUrl: ok");
+

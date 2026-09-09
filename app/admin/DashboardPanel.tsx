@@ -1,6 +1,7 @@
 "use client";
 
 import { StatsOverview } from "./StatsOverview";
+import { StreamStatsPanel } from "./StreamStatsPanel";
 import { AnnouncementPanel } from "./AnnouncementPanel";
 import { PartnerAdsPanel } from "./PartnerAdsPanel";
 import { AdsterraPanel } from "./AdsterraPanel";
@@ -45,6 +46,15 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     Panel: () => (
       <Group>
         <StatsOverview />
+      </Group>
+    ),
+  },
+  {
+    id: "transmissao",
+    label: "Transmissão",
+    Panel: () => (
+      <Group>
+        <StreamStatsPanel />
       </Group>
     ),
   },

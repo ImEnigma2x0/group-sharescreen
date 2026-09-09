@@ -2215,7 +2215,7 @@ export function WatchRoom({ handle }: { handle: string }) {
         }
       }
       const token = await createObsSecurityToken(handle, exportId, authorId, authorName);
-      const url = `${window.location.origin}/obs/${encodeURIComponent(handle)}/${encodeURIComponent(exportId)}?token=${encodeURIComponent(token)}`;
+      const url = `${window.location.origin}/stream/${encodeURIComponent(handle)}/${encodeURIComponent(exportId)}?token=${encodeURIComponent(token)}`;
       await copyText(url);
       setObsModalUrl(url);
     },

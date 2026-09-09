@@ -53,3 +53,35 @@ test("obsToken: rejeita token nulo ou vazio", async () => {
   assert.equal(resultEmpty.valid, false);
 });
 
+test("obsToken: funciona perfeitamente em contexto HTTP não-seguro (sem crypto.subtle)", async () => {
+  const originalSubtle = globalThis.crypto?.subtle;
+  try {
+    // Simula navegador em contexto não seguro (HTTP via IP) onde crypto.subtle é undefined
+    Object.defineProperty(globalThis.crypto, "subtle", {
+      value: undefined,
+      configurable: true,
+    });
+
+    const room = "sala-ip-local";
+    const target = "camera:user-1";
+    const authorId = "user-local-100";
+
+    const token = await createObsSecurityToken(room, target, authorId, "UserLocal");
+    assert.ok(token);
+
+    const result = await verifyObsSecurityToken(token, room);
+    assert.equal(result.valid, true);
+    assert.equal(result.payload?.room, room);
+    assert.equal(result.payload?.target, target);
+    assert.equal(result.payload?.authorId, authorId);
+  } finally {
+    if (originalSubtle) {
+      Object.defineProperty(globalThis.crypto, "subtle", {
+        value: originalSubtle,
+        configurable: true,
+      });
+    }
+  }
+});
+
+
